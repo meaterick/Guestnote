@@ -431,7 +431,7 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
   position: fixed;
   z-index: 20;
   left: max(16px, env(safe-area-inset-left));
-  bottom: calc(var(--dock-h, 60px) + 28px + env(safe-area-inset-bottom));
+  bottom: env(safe-area-inset-bottom, 0px);
   max-width: calc(100vw - 32px);
   margin: 0;
   color: var(--ink-2);
@@ -496,7 +496,7 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
   margin-top: 4px;
   color: var(--ink-3);
   font-family: var(--font-hand);
-  font-size: 25px;
+  font-size: 22px;
   line-height: 1.1;
 }
 .note__sign {
