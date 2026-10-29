@@ -431,7 +431,7 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
   position: fixed;
   z-index: 20;
   left: max(16px, env(safe-area-inset-left));
-  bottom: env(safe-area-inset-bottom, 0px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
   max-width: calc(100vw - 32px);
   margin: 0;
   color: var(--ink-2);
@@ -1065,6 +1065,10 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
   .account-btn.is-signed-in { width: 32px; min-width: 32px; }
 
   :root { --dock-bottom: max(calc(env(safe-area-inset-bottom) + 14px), calc(var(--kb, 0px) + 8px)); }
+  /* 안내 한 줄과 도구 막대 사이에 작은 간격을 남겨요. 글쓰는 중에는 안내가 숨겨져요. */
+  body:not(.is-past) .dock:is([data-mode="today"], [data-mode="pick"]) {
+    bottom: max(calc(env(safe-area-inset-bottom, 0px) + 32px), var(--dock-bottom));
+  }
   .cta { padding: 13px 22px 13px 18px; font-size: 16px; }
   .dock__past { font-size: 14px; padding-left: 14px; }
   .pick { justify-content: space-between; gap: 8px; width: calc(100vw - 16px); padding-left: 16px; }
