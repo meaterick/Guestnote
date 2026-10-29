@@ -1,10 +1,10 @@
-// 공유 모드 저장소. Firebase Firestore에 저장하고, 익명 로그인으로 '내 글'을 구분해요.
-// 보드는 실시간으로 구독해서 다른 방문자가 남기거나 옮긴 글이 바로 보여요.
+// 공유 모드 저장소. Firebase Firestore에 저장하고, Google 로그인으로 '내 글'을 구분해요.
+// 보드는 로그인 없이도 볼 수 있고, 실시간으로 구독해서 다른 방문자가 남기거나 옮긴 글이 바로 보여요.
 //
 // 컬렉션 구조
 //   notes/{id}   보드에 붙은 글 (작은 사진 포함)
 //   images/{id}  크게 보기용 사진 (글을 눌렀을 때만 불러와요)
-//   admins/{uid} 관리자 표시용 빈 문서 (Firebase 콘솔에서 직접 만들어요)
+//   admins/{uid} 관리자 표시용 문서 (Firebase 콘솔에서 직접 만들어요)
 
 const SDK = 'https://www.gstatic.com/firebasejs/12.19.0';
 
@@ -16,7 +16,10 @@ export async function createFirebaseStore(config) {
   ]);
 
   const app = initializeApp(config.firebase);
-  const auth = A.initializeAuth(app, { persistence: [A.indexedDBLocalPersistence, A.browserLocalPersistence] });
+  const auth = A.initializeAuth(app, {
+    persistence: [A.indexedDBLocalPersistence, A.browserLocalPersistence],
+    popupRedirectResolver: A.browserPopupRedirectResolver,
+  });
   const db = F.initializeFirestore(app, {});
   if (config.emulator) {
     const { host, firestorePort, authPort } = config.emulator;
@@ -24,23 +27,44 @@ export async function createFirebaseStore(config) {
     F.connectFirestoreEmulator(db, host, firestorePort);
   }
 
-  let uid = null;
-  let authError = null;
-  try {
-    await auth.authStateReady();
-    if (!auth.currentUser) await A.signInAnonymously(auth);
-    uid = auth.currentUser.uid;
-  } catch (err) {
-    authError = err;
-  }
+  const provider = new A.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
 
-  let isAdmin = false;
-  if (uid) {
-    try {
-      isAdmin = (await F.getDoc(F.doc(db, 'admins', uid))).exists();
-    } catch {
-      isAdmin = false;
+  // 로그인 상태가 바뀌면 관리자인지도 다시 확인하고 화면에 알려요.
+  const session = { user: null, isAdmin: false };
+  const listeners = new Set();
+  let ticket = 0;
+  let settle;
+  const firstState = new Promise((resolve) => { settle = resolve; });
+  A.onAuthStateChanged(auth, async (user) => {
+    const my = ++ticket;
+    let isAdmin = false;
+    if (user) {
+      try {
+        isAdmin = (await F.getDoc(F.doc(db, 'admins', user.uid))).exists();
+      } catch {
+        isAdmin = false;
+      }
     }
+    if (my !== ticket) return;
+    session.user = user ? { uid: user.uid, name: user.displayName || '', email: user.email || '' } : null;
+    session.isAdmin = isAdmin;
+    settle();
+    for (const fn of listeners) fn();
+  });
+  await firstState;
+
+  // 로그인/로그아웃 뒤 관리자 확인까지 끝나서 화면에 반영될 때까지 기다려요.
+  function untilSession(test) {
+    if (test(session)) return Promise.resolve();
+    return new Promise((resolve) => {
+      const check = () => {
+        if (!test(session)) return;
+        listeners.delete(check);
+        resolve();
+      };
+      listeners.add(check);
+    });
   }
 
   const notesCol = F.collection(db, 'notes');
@@ -64,10 +88,33 @@ export async function createFirebaseStore(config) {
 
   return {
     mode: 'firebase',
-    uid,
-    isAdmin,
-    canWrite: !!uid,
-    authError,
+    needsSignIn: true,
+    get user() {
+      return session.user;
+    },
+    get uid() {
+      return session.user?.uid ?? null;
+    },
+    get isAdmin() {
+      return session.isAdmin;
+    },
+    get canWrite() {
+      return !!session.user;
+    },
+    onAuthChange(fn) {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+    // 팝업이 막히지 않게 버튼을 누른 바로 그 순간에 불러야 해요. (await 전에 팝업을 열어요)
+    async signIn() {
+      const { user } = await A.signInWithPopup(auth, provider);
+      await untilSession((s) => s.user?.uid === user.uid);
+      return session.user;
+    },
+    async signOut() {
+      await A.signOut(auth);
+      await untilSession((s) => !s.user);
+    },
 
     subscribeDay(date, onNotes, onError) {
       const q = F.query(notesCol, F.where('date', '==', date));
@@ -81,14 +128,14 @@ export async function createFirebaseStore(config) {
       const batch = F.writeBatch(db);
       const note = {
         ...data,
-        ownerId: uid,
+        ownerId: session.user.uid,
         createdAt: F.serverTimestamp(),
         updatedAt: F.serverTimestamp(),
         ...(image ? imageFields(image) : {}),
       };
       batch.set(ref, note);
       if (image?.full) {
-        batch.set(imageRef(ref.id), { data: image.full.dataUrl, ownerId: uid, date: data.date });
+        batch.set(imageRef(ref.id), { data: image.full.dataUrl, ownerId: session.user.uid, date: data.date });
         fullImages.set(ref.id, image.full.dataUrl);
       }
       await batch.commit();
@@ -107,7 +154,7 @@ export async function createFirebaseStore(config) {
       }
       batch.update(noteRef(id), fields);
       if (image?.full) {
-        batch.set(imageRef(id), { data: image.full.dataUrl, ownerId: uid, date: note.date });
+        batch.set(imageRef(id), { data: image.full.dataUrl, ownerId: session.user.uid, date: note.date });
       } else if (image !== undefined && note.imgFull) {
         batch.delete(imageRef(id));
       }

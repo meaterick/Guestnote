@@ -21,7 +21,10 @@ const THUMB = `data:image/webp;base64,${'A'.repeat(4000)}`;
 const FULL = `data:image/jpeg;base64,${'B'.repeat(200000)}`;
 
 let env;
-const as = (uid) => (uid ? env.authenticatedContext(uid) : env.unauthenticatedContext()).firestore();
+// Google로 로그인한 방문자. provider를 바꾸면 다른 로그인 방식도 흉내 낼 수 있어요.
+const as = (uid, provider = 'google.com') => (uid
+  ? env.authenticatedContext(uid, { firebase: { sign_in_provider: provider } })
+  : env.unauthenticatedContext()).firestore();
 
 function note(over = {}) {
   return {
@@ -63,6 +66,14 @@ test('로그인한 방문자는 오늘 보드에 글을 남길 수 있어요', a
 
 test('로그인하지 않으면 글을 남길 수 없어요', async () => {
   await assertFails(setDoc(doc(as(null), 'notes/n1'), note()));
+});
+
+test('Google이 아닌 방식(익명 등)으로 로그인하면 글을 남길 수 없어요', async () => {
+  await assertFails(setDoc(doc(as('alice', 'anonymous'), 'notes/n1'), note()));
+  await assertFails(setDoc(doc(as('alice', 'password'), 'notes/n2'), note()));
+  await seed('notes/n3', seeded());
+  await assertFails(updateDoc(doc(as('alice', 'anonymous'), 'notes/n3'), { x: 300, updatedAt: serverTimestamp() }));
+  await assertFails(deleteDoc(doc(as('alice', 'anonymous'), 'notes/n3')));
 });
 
 test('다른 사람 이름(ownerId)으로는 남길 수 없어요', async () => {

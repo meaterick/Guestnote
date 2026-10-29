@@ -193,7 +193,8 @@ export function createComposer({ dialog, imageOptions, onSubmit }) {
 
   return {
     // at: 글을 붙일 보드 좌표 (없으면 빈자리를 찾아요)
-    open({ mode = 'create', note = null, at = null, file = null } = {}) {
+    // defaultAuthor: 처음 글을 쓸 때 이름 칸에 미리 넣을 이름 (Google 계정 이름)
+    open({ mode = 'create', note = null, at = null, file = null, defaultAuthor = '' } = {}) {
       state = { mode, note, at };
       working += 1;
       image = mode === 'edit' ? undefined : null;
@@ -216,7 +217,7 @@ export function createComposer({ dialog, imageOptions, onSubmit }) {
         title.textContent = '오늘의 보드에 남기기';
         submit.textContent = '붙이기';
         setType(file ? 'photo' : 'guest');
-        author.value = remembered(NAME_KEY);
+        author.value = remembered(NAME_KEY) || defaultAuthor.slice(0, LIMITS.author);
         showPhoto(null);
       }
       updateCount();

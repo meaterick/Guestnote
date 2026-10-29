@@ -7,7 +7,9 @@ const FIREBASE_DIR = fileURLToPath(new URL('../node_modules/firebase/', import.m
 
 export async function launch() {
   const server = await startServer(0);
-  const browser = await chromium.launch();
+  // Google 로그인 창은 apis.google.com 스크립트가 필요해요. 프록시를 거쳐야 하는 환경이면 프록시를 써요.
+  const proxy = process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY, bypass: '127.0.0.1,localhost' } : undefined;
+  const browser = await chromium.launch(proxy ? { proxy } : {});
   return {
     browser,
     base: `http://127.0.0.1:${server.address().port}/`,

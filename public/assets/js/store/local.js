@@ -91,10 +91,12 @@ export async function createLocalStore() {
 
   return {
     mode: 'local',
+    needsSignIn: false,
+    user: null,
     uid,
     isAdmin: false,
     canWrite: true,
-    authError: null,
+    onAuthChange: () => () => {},
 
     subscribeDay(date, onNotes, onError) {
       const s = { date, onNotes, onError };

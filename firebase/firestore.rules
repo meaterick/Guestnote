@@ -2,7 +2,7 @@ rules_version = '2';
 
 // Guestnote Firestore 보안 규칙
 //
-// - 누구나 모든 날짜의 보드를 읽을 수 있어요.
+// - 누구나 모든 날짜의 보드를 읽을 수 있어요. 글을 남기려면 Google 계정으로 로그인해야 해요.
 // - 글은 '오늘' 보드에만 남길 수 있어요. 오늘은 utcOffsetHours() 시간대의 날짜예요.
 //   public/config.js 의 timeZone 을 바꾸면 여기 값도 같이 바꿔 주세요. (한국 = 9)
 // - 내 글은 오늘 안에서만 옮기거나 고칠 수 있고, 지우는 건 언제든 할 수 있어요.
@@ -16,8 +16,9 @@ service cloud.firestore {
       return 9;
     }
 
+    // Google 계정으로 로그인한 사람만 써요. (익명 로그인 등 다른 방식은 막아요)
     function signedIn() {
-      return request.auth != null;
+      return request.auth != null && request.auth.token.firebase.sign_in_provider == 'google.com';
     }
 
     function isAdmin() {

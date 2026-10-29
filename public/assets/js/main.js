@@ -217,23 +217,14 @@ function checkDay() {
 }
 
 // ---------- 글쓰기 ----------
-function writeBlockedReason() {
-  const code = state.store?.authError?.code || '';
-  if (code === 'auth/operation-not-allowed' || code === 'auth/admin-restricted-operation') {
-    return '지금은 글을 남길 수 없어요. 사이트 관리자가 Firebase에서 익명 로그인을 켜야 해요.';
-  }
-  if (code === 'auth/network-request-failed') return '인터넷 연결을 확인하고 새로고침해 주세요.';
-  return '지금은 글을 남길 수 없어요. 새로고침한 뒤 다시 시도해 주세요.';
-}
-
 function startWriting({ at = null, file = null } = {}) {
   if (!state.store) return;
-  if (!state.store.canWrite) {
-    toast(writeBlockedReason(), { tone: 'error', duration: 5200 });
+  if (state.store.needsSignIn && !state.store.canWrite) {
+    askSignIn({ at, file });
     return;
   }
   if (state.view !== state.today) goTo(state.today);
-  composer.open({ at, file });
+  composer.open({ at, file, defaultAuthor: state.store.user?.name });
 }
 
 function randomTilt() {
@@ -379,6 +370,93 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) checkDay();
 });
 
+// ---------- Google 로그인 ----------
+// 카카오톡 같은 앱 안의 브라우저에서는 Google이 로그인을 막아서, 다른 브라우저로 열도록 안내해요.
+const UA = navigator.userAgent;
+const inKakao = /KAKAOTALK/i.test(UA);
+const inAppBrowser = inKakao || /FBAN|FBAV|Instagram|Line\/|NAVER\(inapp|DaumApps|everytimeApp|; wv\)/i.test(UA);
+const signin = setupDialog($('#signin'), { onClose() { pendingWrite = null; } });
+let pendingWrite = null;
+
+function askSignIn(next = null) {
+  pendingWrite = next;
+  $('#signinError').hidden = true;
+  $('#inAppHint').hidden = !inAppBrowser;
+  $('#openExternal').hidden = !inKakao;
+  signin.open();
+}
+
+function signInErrorMessage(err) {
+  const code = err?.code || '';
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return '';
+  if (code === 'auth/popup-blocked') return '로그인 창이 막혔어요. 브라우저에서 팝업을 허용한 뒤 다시 눌러 주세요.';
+  if (code === 'auth/unauthorized-domain') return '이 주소에서는 아직 로그인할 수 없어요. 사이트 관리자가 Firebase의 승인된 도메인에 이 주소를 추가해야 해요.';
+  if (code === 'auth/operation-not-allowed' || code === 'auth/admin-restricted-operation') {
+    return 'Google 로그인이 아직 꺼져 있어요. 사이트 관리자가 Firebase에서 Google 로그인을 켜야 해요.';
+  }
+  if (code === 'auth/network-request-failed') return '인터넷 연결을 확인하고 다시 시도해 주세요.';
+  if (code === 'auth/web-storage-unsupported' || code === 'auth/operation-not-supported-in-this-environment') {
+    return '이 브라우저에서는 로그인할 수 없어요. 크롬이나 사파리로 열어 주세요.';
+  }
+  return '로그인하지 못했어요. 잠시 후 다시 시도해 주세요.';
+}
+
+$('#googleSignIn').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  $('#signinError').hidden = true;
+  try {
+    // 팝업이 막히지 않게 다른 일보다 먼저 로그인 창을 열어요.
+    await state.store.signIn();
+    const next = pendingWrite;
+    signin.close();
+    toast(`${state.store.user?.name || '방문자'}님, 반가워요.`);
+    if (next) startWriting(next);
+  } catch (err) {
+    // 사용자가 로그인 창을 닫은 경우에는 아무 말도 하지 않아요.
+    const message = signInErrorMessage(err);
+    if (message) {
+      $('#signinError').textContent = message;
+      $('#signinError').hidden = false;
+      console.warn(err);
+    }
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('#openExternal').addEventListener('click', () => {
+  location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(location.href)}`;
+});
+
+function renderAccount() {
+  const s = state.store;
+  const btn = $('#accountBtn');
+  btn.hidden = !s?.needsSignIn;
+  if (!s?.needsSignIn) return;
+  const user = s.user;
+  btn.classList.toggle('is-signed-in', !!user);
+  if (user) {
+    const label = user.name || user.email || '내 계정';
+    btn.textContent = [...label.trim()][0]?.toUpperCase() ?? '나';
+    btn.setAttribute('aria-label', `${label} 계정, 로그아웃은 안내 창에서 할 수 있어요`);
+    btn.title = label;
+  } else {
+    btn.textContent = '로그인';
+    btn.setAttribute('aria-label', 'Google로 로그인');
+    btn.removeAttribute('title');
+  }
+}
+
+$('#accountBtn').addEventListener('click', () => {
+  if (state.store?.user) {
+    renderInfo();
+    info.open();
+  } else {
+    askSignIn();
+  }
+});
+
 // ---------- 안내와 설정 ----------
 const info = setupDialog($('#info'));
 $('#infoBtn').addEventListener('click', () => {
@@ -395,15 +473,40 @@ function renderInfo() {
   const mode = $('#infoMode');
   if (!s) mode.textContent = '저장소에 연결하는 중이에요.';
   else if (s.mode === 'local') mode.textContent = '로컬 모드: 글이 이 브라우저에만 저장돼요. Firebase를 연결하면 방문자 모두가 같은 보드를 봐요.';
-  else if (!s.canWrite) mode.textContent = `공유 모드(읽기 전용): ${writeBlockedReason()}`;
-  else mode.textContent = s.isAdmin ? '공유 모드: 관리자로 접속했어요. 모든 글을 옮기거나 지울 수 있어요.' : '공유 모드: 방문자 모두가 같은 보드를 봐요.';
-  $('#infoUid').textContent = s?.uid ?? '없음';
-  $('#copyUid').disabled = !s?.uid;
+  else if (s.isAdmin) mode.textContent = '공유 모드: 관리자로 로그인했어요. 모든 글을 옮기거나 지울 수 있어요.';
+  else mode.textContent = '공유 모드: 방문자 모두가 같은 보드를 봐요.';
+
+  const shared = !!s?.needsSignIn;
+  const user = s?.user;
+  $('#howtoLogin').hidden = !shared;
+  $('#infoAccountRow').hidden = !shared;
+  $('#infoAccount').textContent = user
+    ? `${user.name || '이름 없음'}${user.email ? ` (${user.email})` : ''}`
+    : '로그인하지 않았어요. 글을 남기려면 Google로 로그인해 주세요.';
+  $('#accountAction').textContent = user ? '로그아웃' : 'Google로 로그인';
+  $('#adminDetails').hidden = !user;
+  $('#infoUid').textContent = user?.uid ?? '';
+
   const theme = pref(PREF_THEME) ?? 'auto';
   for (const r of document.querySelectorAll('input[name="theme"]')) r.checked = r.value === theme;
   $('#liteToggle').checked = root.classList.contains('lite');
   updateCountdown();
 }
+
+$('#accountAction').addEventListener('click', async () => {
+  if (!state.store?.user) {
+    info.close();
+    askSignIn();
+    return;
+  }
+  try {
+    await state.store.signOut();
+    info.close();
+    toast('로그아웃했어요.');
+  } catch {
+    toast('로그아웃하지 못했어요. 잠시 후 다시 시도해 주세요.', { tone: 'error' });
+  }
+});
 
 // 안내 창이 열려 있으면 알림이 창 뒤에 가려져서, 버튼 글자로 결과를 알려요.
 $('#copyUid').addEventListener('click', async (e) => {
@@ -431,13 +534,19 @@ $('#info').addEventListener('change', (e) => {
 function renderModeChip() {
   const s = state.store;
   const chip = $('#modeChip');
-  let text = '';
-  if (s.mode === 'local') text = '로컬 모드';
-  else if (!s.canWrite) text = '읽기 전용';
-  else if (s.isAdmin) text = '관리자';
-  chip.hidden = !text;
-  chip.textContent = text;
-  chip.dataset.kind = s.mode === 'local' ? 'local' : !s.canWrite ? 'readonly' : 'admin';
+  const kind = s.mode === 'local' ? 'local' : s.isAdmin ? 'admin' : '';
+  chip.hidden = !kind;
+  chip.textContent = kind === 'local' ? '로컬 모드' : '관리자';
+  chip.dataset.kind = kind;
+}
+
+// 로그인하거나 로그아웃하면 '내 글' 표시와 옮기기 권한을 다시 그려요.
+function onAuthChanged() {
+  board.setNotes(state.notes, boardCtx());
+  detail?.refresh();
+  renderAccount();
+  renderModeChip();
+  if ($('#info').open) renderInfo();
 }
 
 // ---------- 시작 ----------
@@ -474,7 +583,8 @@ if (state.store) {
     onPick: goTo,
   });
   renderModeChip();
-  if (state.store.authError) console.warn('익명 로그인 실패:', state.store.authError);
+  renderAccount();
+  state.store.onAuthChange(onAuthChanged);
   const start = routeKey();
   if (location.hash && start === state.today) history.replaceState(null, '', location.pathname + location.search);
   state.view = null;

@@ -117,6 +117,10 @@ export function createDetail({ dialog, store, timeZone, permissions, onEdit, onD
         loadFull(next, ++ticket);
       }
     },
+    // 로그인 상태가 바뀌면 고치기/지우기 버튼을 다시 정해요.
+    refresh() {
+      if (current && confirmBox.hidden) render(current);
+    },
     close: () => modal.close(),
   };
 }

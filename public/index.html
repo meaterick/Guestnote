@@ -7,8 +7,8 @@
   <meta name="description" content="날마다 새로 열리는 유리 보드에 방명록과 메모, 사진을 남겨 보세요. 지난 날의 보드도 달력에서 다시 볼 수 있어요.">
   <meta name="theme-color" content="#dfe3ff">
   <!-- 사용자 글은 textContent로만 그려요. 아래 정책은 혹시 모를 스크립트 삽입을 한 번 더 막아 줘요.
-       Firebase(구글 API)와 로컬 에뮬레이터, 구글 글꼴만 허용해요. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://*.googleapis.com http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'self'; form-action 'self'">
+       Firebase(구글 API, Google 로그인 창)와 로컬 에뮬레이터, 구글 글꼴만 허용해요. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://*.googleapis.com http://127.0.0.1:* http://localhost:*; frame-src https://*.firebaseapp.com https://*.web.app https://accounts.google.com http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'self'; form-action 'self'">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -61,6 +61,7 @@
       <button class="chip chip--mode" id="modeChip" type="button" hidden></button>
       <span class="chip chip--quiet" id="resetChip" title="보드는 매일 자정에 새로 열려요"></span>
       <button class="chip chip--today" id="todayBtn" type="button" hidden>오늘 보드로</button>
+      <button class="account-btn" id="accountBtn" type="button" hidden>로그인</button>
       <button class="icon-btn" id="infoBtn" type="button" aria-label="안내와 설정"><svg><use href="#i-info"/></svg></button>
     </div>
   </header>
@@ -197,6 +198,32 @@
     </section>
   </dialog>
 
+  <!-- Google 로그인 -->
+  <dialog class="modal modal--small" id="signin" aria-labelledby="signinTitle">
+    <section class="panel glass signin">
+      <header class="panel__head">
+        <h2 class="panel__title" id="signinTitle">로그인하고 남기기</h2>
+        <button class="icon-btn" type="button" data-close aria-label="닫기"><svg><use href="#i-close"/></svg></button>
+      </header>
+      <p class="signin__lead">글을 남기고 내 글을 옮기려면 Google 계정으로 로그인해 주세요. 보드는 로그인하지 않아도 볼 수 있어요.</p>
+      <p class="signin__note">이메일과 프로필 사진은 보드에 나오지 않아요. 글에는 직접 적은 이름만 보여요.</p>
+      <div class="signin__inapp" id="inAppHint" hidden>
+        <p>카카오톡이나 인스타그램처럼 앱 안에서 연 화면에서는 Google이 로그인을 막아요. 크롬이나 사파리로 열어 주세요.</p>
+        <button class="btn btn--small" id="openExternal" type="button" hidden>다른 브라우저로 열기</button>
+      </div>
+      <p class="form-error" id="signinError" role="alert" hidden></p>
+      <button class="google-btn" id="googleSignIn" type="button">
+        <svg class="google-btn__logo" viewBox="0 0 48 48" aria-hidden="true">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        </svg>
+        <span>Google로 로그인</span>
+      </button>
+    </section>
+  </dialog>
+
   <!-- 안내와 설정 -->
   <dialog class="modal" id="info" aria-labelledby="infoTitle">
     <section class="panel glass info">
@@ -205,6 +232,7 @@
         <button class="icon-btn" type="button" data-close aria-label="닫기"><svg><use href="#i-close"/></svg></button>
       </header>
       <ul class="howto">
+        <li id="howtoLogin" hidden>보드는 누구나 볼 수 있고, 글을 남기거나 옮길 때만 Google 계정으로 로그인해요.</li>
         <li>빈 곳을 두 번 누르면 그 자리에 글을 붙일 수 있어요. 아래 ‘글 남기기’ 버튼도 돼요.</li>
         <li>내가 남긴 글은 끌어서 원하는 자리로 옮길 수 있어요. 키보드 화살표로도 움직여요.</li>
         <li>사진은 올리기 전에 브라우저에서 자동으로 줄여서, 보드에는 작은 사진만 먼저 보여요.</li>
@@ -214,6 +242,10 @@
 
       <dl class="info__list">
         <div><dt>저장 방식</dt><dd id="infoMode"></dd></div>
+        <div class="info__account" id="infoAccountRow" hidden>
+          <dt>내 계정</dt>
+          <dd><span id="infoAccount"></span> <button class="btn btn--small" id="accountAction" type="button">Google로 로그인</button></dd>
+        </div>
       </dl>
 
       <fieldset class="field">
@@ -229,9 +261,9 @@
         <span>유리 효과 가볍게 보기 <small>보드가 버벅일 때 켜 보세요.</small></span>
       </label>
 
-      <details class="admin">
+      <details class="admin" id="adminDetails" hidden>
         <summary>사이트 관리자라면</summary>
-        <p>Firebase 콘솔의 Firestore에서 <code>admins</code> 컬렉션에 아래 기기 ID로 문서를 만들면, 이 브라우저에서 모든 글을 옮기거나 지울 수 있어요.</p>
+        <p>Firebase 콘솔의 Firestore에서 <code>admins</code> 컬렉션에 아래 계정 ID로 문서를 만들면, 이 Google 계정으로 모든 글을 옮기거나 지울 수 있어요.</p>
         <p class="admin__uid"><code id="infoUid"></code> <button class="btn btn--small" id="copyUid" type="button">복사</button></p>
       </details>
     </section>
