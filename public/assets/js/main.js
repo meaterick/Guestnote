@@ -27,7 +27,6 @@ const config = {
 const tz = config.timeZone;
 const todayKey = () => dayKey(new Date(), tz);
 const PREF_THEME = 'guestnote:theme';
-const PREF_LITE = 'guestnote:lite';
 const LITE_AUTO_AT = 80;
 const PREF_TIP = 'guestnote:tip-move';
 const PAST_ONLY_READ = '지난 보드는 읽기만 할 수 있어요. 글은 오늘 보드에 남겨 주세요.';
@@ -61,14 +60,12 @@ function applyTheme(theme) {
   else delete root.dataset.theme;
 }
 
+// 글이 아주 많은 보드에서는 메모장의 유리 흐림을 꺼서, 휴대폰에서도 부드럽게 움직이게 해요.
 function applyLite() {
-  const p = pref(PREF_LITE);
-  const on = p === 'on' || (p === null && state.notes.length > LITE_AUTO_AT);
-  root.classList.toggle('lite', on);
+  root.classList.toggle('lite', state.notes.length > LITE_AUTO_AT);
 }
 
 applyTheme(pref(PREF_THEME));
-applyLite();
 
 // ---------- 그날의 빛깔 ----------
 const hues = { h1: null, h2: null, h3: null };
@@ -561,7 +558,6 @@ $('#accountBtn').addEventListener('click', () => {
   }
   const theme = pref(PREF_THEME) ?? 'auto';
   for (const r of document.querySelectorAll('input[name="theme"]')) r.checked = r.value === theme;
-  $('#liteToggle').checked = root.classList.contains('lite');
   profile.open();
 });
 
@@ -576,14 +572,10 @@ $('#signOutBtn').addEventListener('click', async () => {
 });
 
 $('#profile').addEventListener('change', (e) => {
-  if (e.target.name === 'theme') {
-    const v = e.target.value === 'auto' ? null : e.target.value;
-    setPref(PREF_THEME, v);
-    applyTheme(v);
-  } else if (e.target.id === 'liteToggle') {
-    setPref(PREF_LITE, e.target.checked ? 'on' : 'off');
-    applyLite();
-  }
+  if (e.target.name !== 'theme') return;
+  const v = e.target.value === 'auto' ? null : e.target.value;
+  setPref(PREF_THEME, v);
+  applyTheme(v);
 });
 
 // 로그인하거나 로그아웃하면 '내 글' 표시와 옮기기 권한을 다시 그려요.

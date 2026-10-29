@@ -953,10 +953,7 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
   margin: calc(env(safe-area-inset-top) + 76px) 12px auto auto;
 }
 .modal--menu::backdrop { background: rgb(16 20 44 / 0.12); -webkit-backdrop-filter: none; backdrop-filter: none; }
-.toggle { display: flex; align-items: flex-start; gap: 12px; margin: 16px 2px; font-size: 15px; cursor: pointer; }
-.toggle input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--accent); flex: none; }
-.toggle small { display: block; font-size: 12.5px; color: var(--ink-3); }
-.profile__out { width: 100%; }
+.profile__out { width: 100%; margin-top: 16px; }
 
 /* ---------- 사진 크게 보기 ---------- */
 .viewer {
@@ -1026,7 +1023,7 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
 .google-btn:disabled { opacity: 0.6; cursor: progress; }
 .google-btn__logo { width: 20px; height: 20px; stroke: none; }
 
-/* ---------- 가볍게 보기 / 접근성 ---------- */
+/* ---------- 글이 아주 많은 보드 / 접근성 ---------- */
 .lite .note--memo {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;

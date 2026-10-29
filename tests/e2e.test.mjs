@@ -387,8 +387,8 @@ test('프로필에는 화면 설정과 로그아웃만 있고, 로그아웃하�
   await alice.click('#accountBtn');
   await alice.waitForSelector('#profile[open]');
   const controls = await alice.$$eval('#profile button, #profile input', (els) => els.map((el) => el.id || el.name || el.getAttribute('aria-label')));
-  assert.deepEqual(controls, ['닫기', 'theme', 'theme', 'theme', 'liteToggle', 'signOutBtn']);
-  assert.doesNotMatch(await alice.textContent('#profile'), /alice@example\.com|계정 ID|관리자|이렇게 써요/);
+  assert.deepEqual(controls, ['닫기', 'theme', 'theme', 'theme', 'signOutBtn']);
+  assert.doesNotMatch(await alice.textContent('#profile'), /alice@example\.com|계정 ID|관리자|이렇게 써요|유리 효과/);
   await alice.check('#profile input[name=theme][value=dark]', { force: true });
   assert.equal(await alice.evaluate(() => document.documentElement.dataset.theme), 'dark');
   await alice.check('#profile input[name=theme][value=auto]', { force: true });
