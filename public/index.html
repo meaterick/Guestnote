@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Guestnote 오늘의 방명록</title>
   <meta name="description" content="날마다 새로 열리는 유리 보드에 방명록과 메모, 사진을 남겨 보세요. 지난 날의 보드도 달력에서 다시 볼 수 있어요.">
   <meta name="theme-color" content="#dfe3ff">
@@ -31,14 +31,9 @@
   <svg class="sprite" aria-hidden="true" focusable="false">
     <symbol id="i-left" viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5"/></symbol>
     <symbol id="i-right" viewBox="0 0 24 24"><path d="M9.5 5.5 16 12l-6.5 6.5"/></symbol>
-    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
-    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
-    <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
     <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4.5 19.5l1-4.2L15.8 5a2.1 2.1 0 0 1 3 0l.2.2a2.1 2.1 0 0 1 0 3L8.7 18.5z"/><path d="M13.8 7l3.2 3.2"/></symbol>
-    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.2"/></symbol>
     <symbol id="i-photo" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M20.5 15.5l-4.6-4.3-7.4 7.8"/></symbol>
-    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14.5" rx="3"/><path d="M8 3.5v4M16 3.5v4M4 10h16"/></symbol>
   </svg>
 
   <div class="sky" aria-hidden="true">
@@ -69,16 +64,15 @@
     </nav>
 
     <div class="topbar__tools">
-      <button class="chip chip--admin" id="adminChip" type="button" hidden>관리자</button>
+      <span class="chip chip--admin" id="adminChip" hidden>관리자</span>
       <span class="chip chip--quiet" id="resetChip" title="보드는 매일 자정에 새로 열려요"></span>
       <button class="chip chip--today" id="todayBtn" type="button" hidden>오늘 보드로</button>
       <button class="account-btn" id="accountBtn" type="button">로그인</button>
-      <button class="icon-btn" id="infoBtn" type="button" aria-label="안내와 설정"><svg><use href="#i-info"/></svg></button>
     </div>
   </header>
 
   <main class="viewport" id="viewport" aria-label="방명록 보드" aria-describedby="boardHelp">
-    <p class="sr-only" id="boardHelp">보드를 끌거나 휠을 굴려 둘러볼 수 있어요. Ctrl과 휠, 또는 두 손가락으로 확대하고 줄여요. 글은 Tab으로 차례대로 고를 수 있고, Enter로 펼쳐 봐요. 내 글은 화살표 키로 옮길 수 있어요.</p>
+    <p class="sr-only" id="boardHelp">보드를 끌거나 휠을 굴려 둘러볼 수 있어요. Ctrl과 휠, 또는 두 손가락으로 확대하고 줄여요. 빈 곳을 두 번 누르거나 N 키를 누르면 그 자리에 바로 글을 써요. 글은 Tab으로 차례대로 가서 Enter로 고르고, 내 글은 화살표 키로 옮겨요.</p>
     <div class="world" id="world">
       <div class="sheet" aria-hidden="true"></div>
       <div class="board-message" id="boardMessage" role="status">
@@ -86,108 +80,59 @@
         <p class="board-message__hint" id="boardMessageHint"></p>
       </div>
       <div class="notes" id="notes"></div>
+      <div class="drafts" id="drafts"></div>
     </div>
   </main>
 
-  <div class="zoombar glass" role="toolbar" aria-label="보드 확대와 축소">
-    <button class="icon-btn" id="zoomOut" type="button" aria-label="줄이기"><svg><use href="#i-minus"/></svg></button>
-    <button class="zoombar__label" id="zoomLabel" type="button" aria-label="원래 크기로 보기">100%</button>
-    <button class="icon-btn" id="zoomIn" type="button" aria-label="키우기"><svg><use href="#i-plus"/></svg></button>
-    <button class="icon-btn" id="zoomFit" type="button" aria-label="모든 글이 보이게 맞추기"><svg><use href="#i-fit"/></svg></button>
-  </div>
-
-  <canvas class="minimap glass" id="minimap" role="img" aria-label="보드 전체 미니맵. 누르면 그 위치로 이동해요."></canvas>
-
-  <div class="dock">
+  <!-- 아래 막대: 오늘은 글쓰기 버튼, 지난 날은 안내, 글을 고르면 그 글의 정보, 쓰는 중에는 글쓰기 도구 -->
+  <div class="dock" id="dock" data-mode="today">
     <button class="cta" id="writeBtn" type="button"><svg><use href="#i-pen"/></svg><span>글 남기기</span></button>
+
     <p class="dock__past glass">
       <span>지난 보드는 읽기만 할 수 있어요.</span>
       <button class="btn btn--small" id="backToToday" type="button">오늘 보드로</button>
     </p>
+
+    <div class="pick glass" id="pickBar" role="group" aria-label="고른 글">
+      <p class="pick__who">
+        <span class="pick__author" id="pickAuthor"></span>
+        <time class="pick__time" id="pickTime"></time>
+        <span class="pick__mine" id="pickMine" hidden>내 글</span>
+      </p>
+      <div class="pick__actions" id="pickActions">
+        <button class="btn btn--small" id="pickView" type="button">크게 보기</button>
+        <button class="btn btn--small" id="pickEdit" type="button">고치기</button>
+        <button class="btn btn--small btn--danger-quiet" id="pickDelete" type="button">지우기</button>
+        <button class="icon-btn" id="pickClose" type="button" aria-label="고르기 그만두기"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="pick__confirm" id="pickConfirm" role="alert" hidden>
+        <span>이 글을 지울까요?</span>
+        <button class="btn btn--small" id="pickNo" type="button">그대로 두기</button>
+        <button class="btn btn--small btn--danger" id="pickYes" type="button">지우기</button>
+      </div>
+    </div>
+
+    <div class="tools glass" id="writeBar" role="toolbar" aria-label="글쓰기 도구">
+      <div class="seg seg--small tools__style" role="radiogroup" aria-label="모양">
+        <label class="seg__item"><input type="radio" name="style" value="text" checked><span>글자</span></label>
+        <label class="seg__item"><input type="radio" name="style" value="memo"><span>메모장</span></label>
+      </div>
+      <div class="swatches swatches--small tools__tints" id="writeTints" role="radiogroup" aria-label="색"></div>
+      <button class="icon-btn tools__photo" id="writePhoto" type="button" aria-label="사진 넣기" title="사진 넣기 (끌어 놓거나 붙여 넣어도 돼요)"><svg><use href="#i-photo"/></svg></button>
+      <input type="file" id="photoInput" accept="image/*" hidden>
+      <div class="tools__end">
+        <button class="btn btn--small" id="writeCancel" type="button">취소</button>
+        <button class="btn btn--small btn--primary" id="writeSubmit" type="button">올리기</button>
+      </div>
+    </div>
   </div>
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <!-- 글 남기기 / 고치기 -->
-  <dialog class="modal" id="composer" aria-labelledby="composerTitle">
-    <form class="panel glass composer" novalidate>
-      <header class="panel__head">
-        <h2 class="panel__title" id="composerTitle">오늘의 보드에 남기기</h2>
-        <button class="icon-btn" type="button" data-close aria-label="닫기"><svg><use href="#i-close"/></svg></button>
-      </header>
-
-      <fieldset class="seg">
-        <legend class="sr-only">글 종류</legend>
-        <label class="seg__item"><input type="radio" name="type" value="guest" checked><span>방명록</span></label>
-        <label class="seg__item"><input type="radio" name="type" value="memo"><span>메모</span></label>
-        <label class="seg__item"><input type="radio" name="type" value="photo"><span>사진</span></label>
-      </fieldset>
-
-      <label class="field">
-        <span class="field__label">이름</span>
-        <input class="field__input" name="author" autocomplete="nickname" placeholder="이름이나 별명" required>
-      </label>
-
-      <label class="field">
-        <span class="field__row"><span class="field__label">내용</span><span class="field__count" id="textCount">0 / 500</span></span>
-        <textarea class="field__input field__input--area" name="text" rows="5"></textarea>
-      </label>
-
-      <fieldset class="field">
-        <legend class="field__label">유리 색</legend>
-        <div class="swatches" id="tintSwatches"></div>
-      </fieldset>
-
-      <div class="field">
-        <span class="field__label">사진</span>
-        <input type="file" id="photoInput" accept="image/*" hidden>
-        <button class="dropzone" id="photoPick" type="button">
-          <svg aria-hidden="true"><use href="#i-photo"/></svg>
-          <span class="dropzone__label">사진 추가</span>
-          <span class="dropzone__hint">끌어 놓거나 붙여 넣어도 돼요. 올리기 전에 자동으로 줄여요.</span>
-        </button>
-        <figure class="photo-preview" id="photoPreview" hidden>
-          <img alt="첨부한 사진 미리보기">
-          <figcaption id="photoInfo"></figcaption>
-          <button class="btn btn--small" id="photoRemove" type="button">사진 빼기</button>
-        </figure>
-      </div>
-
-      <p class="form-error" id="composerError" role="alert" hidden></p>
-
-      <footer class="panel__foot">
-        <button class="btn" type="button" data-close>취소</button>
-        <button class="btn btn--primary" id="composerSubmit" type="submit">붙이기</button>
-      </footer>
-    </form>
-  </dialog>
-
-  <!-- 글 자세히 보기 -->
-  <dialog class="modal modal--detail" id="detail" aria-labelledby="detailType">
-    <article class="panel glass detail">
-      <header class="panel__head">
-        <h2 class="panel__title panel__title--small" id="detailType"></h2>
-        <button class="icon-btn" type="button" data-close aria-label="닫기"><svg><use href="#i-close"/></svg></button>
-      </header>
-      <figure class="detail__figure" id="detailFigure" hidden><img id="detailImg" alt=""></figure>
-      <p class="detail__text" id="detailText"></p>
-      <footer class="detail__meta">
-        <span class="detail__sign" id="detailAuthor"></span>
-        <span class="detail__when"><span class="detail__mine" id="detailMine" hidden>내 글</span><time id="detailTime"></time></span>
-      </footer>
-      <div class="panel__foot" id="detailActions">
-        <button class="btn btn--danger-quiet" id="detailDelete" type="button">지우기</button>
-        <button class="btn" id="detailEdit" type="button">고치기</button>
-      </div>
-      <div class="confirm" id="deleteConfirm" hidden>
-        <p>이 글을 지울까요? 지운 글은 되돌릴 수 없어요.</p>
-        <div class="confirm__actions">
-          <button class="btn" id="deleteNo" type="button">그대로 두기</button>
-          <button class="btn btn--danger" id="deleteYes" type="button">지우기</button>
-        </div>
-      </div>
-      <p class="detail__status" id="detailStatus" role="alert"></p>
-    </article>
+  <!-- 사진 크게 보기 -->
+  <dialog class="viewer" id="viewer" aria-label="사진 크게 보기">
+    <img class="viewer__img" id="viewerImg" alt="">
+    <button class="icon-btn viewer__close" type="button" data-close aria-label="닫기"><svg><use href="#i-close"/></svg></button>
   </dialog>
 
   <!-- 지난 기록 달력 -->
@@ -239,45 +184,23 @@
     </section>
   </dialog>
 
-  <!-- 안내와 설정 -->
-  <dialog class="modal" id="info" aria-labelledby="infoTitle">
-    <section class="panel glass info">
+  <!-- 프로필: 화면 설정과 로그아웃 -->
+  <dialog class="modal modal--menu" id="profile" aria-labelledby="profileTitle">
+    <section class="panel glass profile">
       <header class="panel__head">
-        <h2 class="panel__title" id="infoTitle">이렇게 써요</h2>
+        <h2 class="panel__title panel__title--small" id="profileTitle">화면 설정</h2>
         <button class="icon-btn" type="button" data-close aria-label="닫기"><svg><use href="#i-close"/></svg></button>
       </header>
-      <ul class="howto">
-        <li>보드는 누구나 볼 수 있고, 글을 남기거나 옮길 때만 Google 계정으로 로그인해요.</li>
-        <li>빈 곳을 두 번 누르면 그 자리에 글을 붙일 수 있어요. 아래 ‘글 남기기’ 버튼도 돼요.</li>
-        <li>내가 남긴 글은 끌어서 원하는 자리로 옮길 수 있어요. 키보드 화살표로도 움직여요.</li>
-        <li>사진은 올리기 전에 브라우저에서 자동으로 줄여서, 보드에는 작은 사진만 먼저 보여요.</li>
-        <li>보드는 매일 자정(한국 시간)에 새로 열려요. 지난 보드는 위쪽 날짜를 눌러 달력에서 찾아보세요.</li>
-      </ul>
-      <p class="info__reset" id="infoReset"></p>
-
-      <dl class="info__list">
-        <dt>내 계정</dt>
-        <dd class="info__account"><span id="infoAccount"></span> <button class="btn btn--small" id="accountAction" type="button">Google로 로그인</button></dd>
-      </dl>
-
-      <fieldset class="field">
-        <legend class="field__label">화면</legend>
-        <div class="seg seg--small">
-          <label class="seg__item"><input type="radio" name="theme" value="auto"><span>기기 설정</span></label>
-          <label class="seg__item"><input type="radio" name="theme" value="light"><span>밝게</span></label>
-          <label class="seg__item"><input type="radio" name="theme" value="dark"><span>어둡게</span></label>
-        </div>
-      </fieldset>
+      <div class="seg seg--small" role="radiogroup" aria-label="밝기">
+        <label class="seg__item"><input type="radio" name="theme" value="auto"><span>기기 설정</span></label>
+        <label class="seg__item"><input type="radio" name="theme" value="light"><span>밝게</span></label>
+        <label class="seg__item"><input type="radio" name="theme" value="dark"><span>어둡게</span></label>
+      </div>
       <label class="toggle">
         <input type="checkbox" id="liteToggle">
         <span>유리 효과 가볍게 보기 <small>보드가 버벅일 때 켜 보세요.</small></span>
       </label>
-
-      <details class="admin" id="adminDetails" hidden>
-        <summary>사이트 관리자라면</summary>
-        <p>Firebase 콘솔의 Firestore에서 <code>admins</code> 컬렉션에 아래 계정 ID로 문서를 만들면, 이 Google 계정으로 모든 글을 옮기거나 지울 수 있어요.</p>
-        <p class="admin__uid"><code id="infoUid"></code> <button class="btn btn--small" id="copyUid" type="button">복사</button></p>
-      </details>
+      <button class="btn profile__out" id="signOutBtn" type="button">로그아웃</button>
     </section>
   </dialog>
 </body>

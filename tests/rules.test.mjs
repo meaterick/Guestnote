@@ -29,7 +29,7 @@ const as = (uid, provider = 'google.com') => (uid
 
 function note(over = {}) {
   return {
-    date: TODAY, type: 'guest', author: '앨리스', text: '안녕하세요', color: 'sky',
+    date: TODAY, type: 'text', author: '앨리스', text: '안녕하세요', color: 'sky',
     x: 100, y: 200, z: 1, rot: 1.5, ownerId: 'alice',
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...over,
   };
@@ -106,7 +106,8 @@ test('잘못된 내용은 막아요', async () => {
     { rot: 20 },
     { z: '1' },
     { extra: true },
-    { type: 'photo', text: '사진 없는 사진 글' },
+    { type: 'guest' },
+    { type: 'photo' },
   ];
   for (const [i, over] of bad.entries()) {
     await assertFails(setDoc(doc(db, `notes/bad${i}`), note(over)));
@@ -116,7 +117,8 @@ test('잘못된 내용은 막아요', async () => {
 test('사진은 작은 WebP/JPEG 바이트만 받아요', async () => {
   const db = as('alice');
   const img = { img: THUMB, imgType: 'image/webp', imgW: 640, imgH: 480, imgFull: false };
-  await assertSucceeds(setDoc(doc(db, 'notes/ok'), note({ type: 'photo', text: '', ...img })));
+  await assertSucceeds(setDoc(doc(db, 'notes/ok'), note({ text: '', ...img })));
+  await assertSucceeds(setDoc(doc(db, 'notes/memo'), note({ type: 'memo', text: '', ...img })));
   await assertSucceeds(setDoc(doc(db, 'notes/jpeg'), note({ ...img, imgType: 'image/jpeg', img: bytes(40000) })));
   await assertFails(setDoc(doc(db, 'notes/svg'), note({ ...img, imgType: 'image/svg+xml' })));
   await assertFails(setDoc(doc(db, 'notes/big'), note({ ...img, img: bytes(40001) })));
@@ -131,6 +133,7 @@ test('내 글은 오늘 안에서 옮기거나 고칠 수 있어요', async () =
   const db = as('alice');
   await assertSucceeds(updateDoc(doc(db, 'notes/n1'), { x: 300, y: 400, z: 9, updatedAt: serverTimestamp() }));
   await assertSucceeds(updateDoc(doc(db, 'notes/n1'), { text: '고친 글', color: 'mint', updatedAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(doc(db, 'notes/n1'), { type: 'memo', rot: -2, updatedAt: serverTimestamp() }));
   await assertFails(updateDoc(doc(db, 'notes/n1'), { x: 10 }));
   await assertFails(updateDoc(doc(db, 'notes/n1'), { date: YESTERDAY, updatedAt: serverTimestamp() }));
   await assertFails(updateDoc(doc(db, 'notes/n1'), { ownerId: 'bob', updatedAt: serverTimestamp() }));
@@ -144,24 +147,36 @@ test('남의 글이나 지난 글은 옮길 수 없어요', async () => {
   await assertFails(updateDoc(doc(as('alice'), 'notes/past'), { text: '지난 글 고치기', updatedAt: serverTimestamp() }));
 });
 
-test('관리자는 어느 날의 글이든 옮기거나 지울 수 있지만 내용은 못 고쳐요', async () => {
+test('관리자는 오늘 보드의 남의 글을 옮기거나 지울 수 있지만, 내용은 못 고쳐요', async () => {
   await seed('admins/root', {});
-  await seed('notes/past', seeded({ date: YESTERDAY }));
+  await seed('notes/today', seeded());
+  await seed('notes/today2', seeded());
   const db = as('root');
-  await assertSucceeds(updateDoc(doc(db, 'notes/past'), { x: 1, y: 2, z: 3, updatedAt: serverTimestamp() }));
-  await assertFails(updateDoc(doc(db, 'notes/past'), { text: '관리자가 고침', updatedAt: serverTimestamp() }));
-  await assertSucceeds(deleteDoc(doc(db, 'notes/past')));
+  await assertSucceeds(updateDoc(doc(db, 'notes/today'), { x: 1, y: 2, z: 3, updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(db, 'notes/today'), { text: '관리자가 고침', updatedAt: serverTimestamp() }));
+  await assertSucceeds(deleteDoc(doc(db, 'notes/today2')));
 });
 
-test('내 글은 언제든 지울 수 있고, 남의 글은 못 지워요', async () => {
+test('지난 보드는 관리자도 읽기만 할 수 있어요', async () => {
+  await seed('admins/root', {});
   await seed('notes/past', seeded({ date: YESTERDAY }));
-  await assertFails(deleteDoc(doc(as('bob'), 'notes/past')));
-  await assertSucceeds(deleteDoc(doc(as('alice'), 'notes/past')));
+  for (const uid of ['root', 'alice']) {
+    const db = as(uid);
+    await assertSucceeds(getDoc(doc(db, 'notes/past')));
+    await assertFails(updateDoc(doc(db, 'notes/past'), { x: 1, y: 2, z: 3, updatedAt: serverTimestamp() }));
+    await assertFails(deleteDoc(doc(db, 'notes/past')));
+  }
+});
+
+test('내 글은 오늘 지울 수 있고, 남의 글은 못 지워요', async () => {
+  await seed('notes/today', seeded());
+  await assertFails(deleteDoc(doc(as('bob'), 'notes/today')));
+  await assertSucceeds(deleteDoc(doc(as('alice'), 'notes/today')));
 });
 
 test('큰 사진은 같은 글과 함께 저장해야 해요', async () => {
   const db = as('alice');
-  const withImage = note({ type: 'photo', text: '', img: THUMB, imgType: 'image/webp', imgW: 640, imgH: 480, imgFull: true });
+  const withImage = note({ text: '', img: THUMB, imgType: 'image/webp', imgW: 640, imgH: 480, imgFull: true });
 
   const batch = writeBatch(db);
   batch.set(doc(db, 'notes/p1'), withImage);
@@ -206,6 +221,13 @@ test('사진을 빼거나 바꾸고, 글과 함께 지울 수 있어요', async 
   gone.delete(doc(db, 'notes/p1'));
   gone.delete(doc(db, 'images/p1'));
   await assertSucceeds(gone.commit());
+});
+
+test('지난 날의 큰 사진은 아무도 지울 수 없어요', async () => {
+  await seed('admins/root', {});
+  await seed('images/old', { data: FULL, type: 'image/jpeg', ownerId: 'alice', date: YESTERDAY });
+  await assertFails(deleteDoc(doc(as('alice'), 'images/old')));
+  await assertFails(deleteDoc(doc(as('root'), 'images/old')));
 });
 
 test('관리자 목록은 자기 것만 확인할 수 있고 아무도 못 써요', async () => {

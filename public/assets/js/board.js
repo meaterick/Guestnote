@@ -1,31 +1,39 @@
-// 큰 보드: 끌어서 둘러보기, 확대/축소, 내 글 옮기기, 미니맵
+// 큰 보드: 끌어서 둘러보기, 확대/축소, 글 고르기, 내 글 옮기기
 import { clamp } from './ui.js';
-import { createNoteElement, paintNote, TINTS } from './notes.js';
+import { createNoteElement, paintNote } from './notes.js';
 
 // 보드 크기. firestore.rules 의 좌표 범위와 같아야 해요.
 const WORLD = { w: 4000, h: 2600 };
 const MIN_SCALE = 0.06;
 const MAX_SCALE = 2.4;
 const KEEP_VISIBLE = 120;
+const DOUBLE_TAP_MS = 380;
 const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export function createBoard({ viewport, world, layer, minimap, handlers }) {
+// handlers
+//   insets()               화면 가장자리에서 머리말·아래 막대가 가리는 만큼
+//   onSelect(note, opts)   글을 한 번 눌렀을 때 (opts.keyboard: Enter로 골랐을 때)
+//   onActivate(note)       글을 두 번 눌렀을 때
+//   onEmptyTap(at)         빈 곳을 한 번 눌렀을 때 (at: 보드 좌표)
+//   onEmptyActivate(at)    빈 곳을 두 번 눌렀을 때
+//   onMove(note, pos)      내 글을 옮겼을 때 (Promise, 실패하면 제자리로 돌아가요)
+export function createBoard({ viewport, world, layer, handlers }) {
   const view = { x: 0, y: 0, s: 1 };
   const items = new Map(); // id → { el, note }
   const pointers = new Map();
   const kbMoves = new Map();
-  let ctx = { uid: null, timeZone: 'Asia/Seoul', canMove: () => false };
+  const held = new Set(); // 쓰는 중이라 잠시 숨겨 둔 글
+  let selectedId = null;
+  let ctx = { uid: null, canMove: () => false };
   let maxZ = 0;
   let gesture = null;
   let lastTap = null;
   let anim = 0;
   let edgeRaf = 0;
-  let mmRaf = 0;
   let kbTimer = 0;
   let settled = false;
-  let flashId = null;
 
   // ---------- 화면 ↔ 보드 좌표 ----------
   function toWorld(cx, cy) {
@@ -62,8 +70,6 @@ export function createBoard({ viewport, world, layer, minimap, handlers }) {
 
   function apply() {
     world.style.transform = `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.s})`;
-    handlers.onView?.(view);
-    drawMinimapSoon();
   }
 
   function setView(target) {
@@ -135,13 +141,10 @@ export function createBoard({ viewport, world, layer, minimap, handlers }) {
   }
 
   // 글이 있으면 글이 모두 보이게, 없으면 보드 한가운데를 보여 줘요.
-  function fit({ animate = true, whole = false } = {}) {
+  function fit({ animate = true } = {}) {
     const a = visibleArea();
     let target;
-    if (whole) {
-      const s = Math.min(a.width / WORLD.w, a.height / WORLD.h);
-      target = centeredOn(WORLD.w / 2, WORLD.h / 2, s);
-    } else if (items.size) {
+    if (items.size) {
       const b = contentBox();
       const pad = 64;
       const s = clamp(Math.min(a.width / (b.w + pad * 2), a.height / (b.h + pad * 2)), minScale(), 1);
@@ -154,23 +157,35 @@ export function createBoard({ viewport, world, layer, minimap, handlers }) {
     else setView(target);
   }
 
-  // 화면 밖에 있는 글이 보이도록 보드를 옮겨요.
-  function reveal(rect) {
+  // 보기 t에서 rect가 보이는 곳 안에 들도록 t를 옮겨요. high면 위쪽 가장자리에 붙여요.
+  function shiftInto(t, rect, high = false) {
     const a = visibleArea();
     const m = 24;
-    const sx = rect.x * view.s + view.x;
-    const sy = rect.y * view.s + view.y;
-    const sw = rect.w * view.s;
-    const shh = rect.h * view.s;
-    let dx = 0; let dy = 0;
-    if (sw + m * 2 > a.width || shh + m * 2 > a.height) {
-      return animateTo(centeredOn(rect.x + rect.w / 2, rect.y + rect.h / 2, view.s));
-    }
-    if (sx < a.left + m) dx = a.left + m - sx;
-    else if (sx + sw > a.left + a.width - m) dx = a.left + a.width - m - (sx + sw);
-    if (sy < a.top + m) dy = a.top + m - sy;
-    else if (sy + shh > a.top + a.height - m) dy = a.top + a.height - m - (sy + shh);
-    if (dx || dy) animateTo({ x: view.x + dx, y: view.y + dy });
+    const left = rect.x * t.s + t.x;
+    const top = rect.y * t.s + t.y;
+    const w = rect.w * t.s;
+    const hh = rect.h * t.s;
+    if (left < a.left + m) t.x += a.left + m - left;
+    else if (left + w > a.left + a.width - m) t.x += Math.max(a.left + m - left, a.left + a.width - m - (left + w));
+    if (high || top < a.top + m) t.y += a.top + m - top;
+    else if (top + hh > a.top + a.height - m) t.y += Math.max(a.top + m - top, a.top + a.height - m - (top + hh));
+    return t;
+  }
+
+  // 화면 밖에 있는 글이 보이도록 보드를 옮겨요.
+  function reveal(rect) {
+    const t = shiftInto({ ...view }, rect);
+    if (t.x !== view.x || t.y !== view.y) animateTo(t);
+  }
+
+  // 글을 쓰기 좋게 보여 줘요: 너무 작게 보고 있으면 키우고(at 점은 화면에서 제자리), 글상자가 다 보이게 옮겨요.
+  // high: 휴대폰 키보드에 가리지 않게 글상자를 위쪽으로 올려요.
+  function focusOn(rect, { at = null, minScale: least = 0.9, high = false, animate = true } = {}) {
+    const s = Math.min(MAX_SCALE, Math.max(view.s, least));
+    const p = at ?? { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
+    const t = shiftInto({ s, x: p.x * view.s + view.x - p.x * s, y: p.y * view.s + view.y - p.y * s }, rect, high);
+    if (animate) animateTo(t, 260);
+    else setView(t);
   }
 
   // ---------- 글 그리기 ----------
@@ -198,7 +213,7 @@ export function createBoard({ viewport, world, layer, minimap, handlers }) {
         item = { el: createNoteElement(note), note };
         items.set(note.id, item);
         layer.append(item.el);
-        if (settled && !reducedMotion()) {
+        if (settled && !held.has(note.id) && !reducedMotion()) {
           item.el.classList.add('is-arriving');
           item.el.addEventListener('animationend', () => item.el.classList.remove('is-arriving'), { once: true });
         }
@@ -206,15 +221,13 @@ export function createBoard({ viewport, world, layer, minimap, handlers }) {
       const moved = !isNew && (item.note.x !== note.x || item.note.y !== note.y);
       item.note = note;
       paintNote(item.el, note, ctx);
+      item.el.classList.toggle('is-held', held.has(note.id));
+      item.el.classList.toggle('is-selected', note.id === selectedId);
       const busy = (gesture?.type === 'note' && gesture.id === note.id) || kbMoves.has(note.id);
       if (!busy) {
-        if (moved) glide(item.el);
+        if (moved && !held.has(note.id)) glide(item.el);
         place(item.el, note.x, note.y);
         item.el.style.zIndex = String(Number(note.z) || 0);
-      }
-      if (flashId === note.id) {
-        flashId = null;
-        flash(item.el);
       }
     }
     for (const [id, item] of items) {
@@ -224,23 +237,32 @@ export function createBoard({ viewport, world, layer, minimap, handlers }) {
       }
     }
     settled = true;
-    drawMinimapSoon();
-  }
-
-  function flash(el) {
-    el.classList.remove('is-flash');
-    void el.offsetWidth;
-    el.classList.add('is-flash');
-    setTimeout(() => el.classList.remove('is-flash'), 1600);
   }
 
   function reset() {
     for (const item of items.values()) item.el.remove();
     items.clear();
     kbMoves.clear();
+    selectedId = null;
     settled = false;
     maxZ = 0;
-    drawMinimapSoon();
+  }
+
+  // 쓰는 중인 글은 보드에서 잠시 숨겨요. (같은 자리에 글상자가 떠 있어요)
+  function hold(id) {
+    held.add(id);
+    items.get(id)?.el.classList.add('is-held');
+  }
+
+  function release(id) {
+    held.delete(id);
+    items.get(id)?.el.classList.remove('is-held');
+  }
+
+  function select(id) {
+    if (selectedId) items.get(selectedId)?.el.classList.remove('is-selected');
+    selectedId = id;
+    if (id) items.get(id)?.el.classList.add('is-selected');
   }
 
   // ---------- 빈자리 찾기 ----------
@@ -278,10 +300,27 @@ export function createBoard({ viewport, world, layer, minimap, handlers }) {
     });
   }
 
-  // ---------- 포인터: 둘러보기 / 글 옮기기 / 두 손가락 확대 ----------
+  // ---------- 포인터: 둘러보기 / 글 옮기기 / 두 손가락 확대 / 누르기 ----------
   function itemFromTarget(target) {
     const el = target.closest?.('.note');
     return el ? items.get(el.dataset.id) : null;
+  }
+
+  // 한 번 누르면 고르기, 같은 곳을 금방 다시 누르면 두 번 누르기예요.
+  function tap(e, item) {
+    const now = performance.now();
+    const id = item?.note.id ?? null;
+    const twice = !!lastTap && lastTap.id === id && now - lastTap.t < DOUBLE_TAP_MS
+      && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30;
+    lastTap = twice ? null : { t: now, x: e.clientX, y: e.clientY, id };
+    if (item) {
+      if (twice) handlers.onActivate(item.note);
+      else handlers.onSelect(item.note, {});
+    } else {
+      const at = toWorld(e.clientX, e.clientY);
+      if (twice) handlers.onEmptyActivate(at);
+      else handlers.onEmptyTap(at);
+    }
   }
 
   function startPinch() {
@@ -310,6 +349,8 @@ export function createBoard({ viewport, world, layer, minimap, handlers }) {
 
   function onDown(e) {
     if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
+    // 쓰는 중인 글상자 안에서는 글자를 고르고 고칠 수 있게 보드가 끼어들지 않아요.
+    if (e.target.closest?.('.is-draft')) return;
     cancelAnimationFrame(anim);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { viewport.setPointerCapture(e.pointerId); } catch { /* 이미 끝난 포인터 */ }
@@ -404,19 +445,10 @@ export function createBoard({ viewport, world, layer, minimap, handlers }) {
     if (g.type === 'note') {
       g.item.el.classList.remove('is-dragging');
       if (g.moved) commitMove(g.item, g.pos);
-      else handlers.onOpen(g.item.note);
+      else tap(e, g.item);
       return;
     }
-    if (g.moved) return;
-    if (g.item) return handlers.onOpen(g.item.note);
-    // 빈 곳을 두 번 누르면 그 자리에 글을 남겨요.
-    const now = performance.now();
-    if (lastTap && now - lastTap.t < 380 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) {
-      lastTap = null;
-      handlers.onEmptyActivate(toWorld(e.clientX, e.clientY));
-    } else {
-      lastTap = { t: now, x: e.clientX, y: e.clientY };
-    }
+    if (!g.moved) tap(e, g.item);
   }
 
   function onCancel(e) {
@@ -460,13 +492,18 @@ export function createBoard({ viewport, world, layer, minimap, handlers }) {
     if (!pointers.size) zoomAt(gestureScale * e.scale, e.clientX, e.clientY);
   });
 
+  // 글상자에 커서를 두면 브라우저가 감춰진 스크롤을 움직일 수 있어서, 보드 좌표가 어긋나지 않게 되돌려요.
+  viewport.addEventListener('scroll', () => {
+    if (viewport.scrollTop || viewport.scrollLeft) viewport.scrollTo(0, 0);
+  });
+
   // ---------- 키보드 ----------
   layer.addEventListener('keydown', (e) => {
     const item = itemFromTarget(e.target);
     if (!item) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      handlers.onOpen(item.note);
+      handlers.onSelect(item.note, { keyboard: true });
       return;
     }
     const d = ARROWS[e.key];
@@ -501,59 +538,6 @@ export function createBoard({ viewport, world, layer, minimap, handlers }) {
     if (item && item.el.matches(':focus-visible')) reveal(noteRect(item));
   });
 
-  // ---------- 미니맵 ----------
-  function drawMinimapSoon() {
-    if (!mmRaf) mmRaf = requestAnimationFrame(drawMinimap);
-  }
-
-  function drawMinimap() {
-    mmRaf = 0;
-    if (!minimap || !minimap.clientWidth) return;
-    const dpr = window.devicePixelRatio || 1;
-    const cw = minimap.clientWidth;
-    const ch = minimap.clientHeight;
-    if (minimap.width !== Math.round(cw * dpr)) {
-      minimap.width = Math.round(cw * dpr);
-      minimap.height = Math.round(ch * dpr);
-    }
-    const g = minimap.getContext('2d');
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.clearRect(0, 0, cw, ch);
-    const k = cw / WORLD.w;
-    const style = getComputedStyle(minimap);
-    for (const item of items.values()) {
-      const r = noteRect(item);
-      const hue = TINTS.find((t) => t.id === item.note.color)?.hue;
-      g.fillStyle = '#ffffff';
-      if (hue != null) g.fillStyle = `oklch(0.8 0.12 ${hue})`;
-      g.globalAlpha = item.note.ownerId === ctx.uid ? 1 : 0.85;
-      g.fillRect(r.x * k, r.y * k, Math.max(2, r.w * k), Math.max(2, r.h * k));
-    }
-    g.globalAlpha = 1;
-    const vr = viewport.getBoundingClientRect();
-    g.strokeStyle = style.getPropertyValue('--minimap-frame').trim() || '#1e2440';
-    g.lineWidth = 1.5;
-    g.strokeRect((-view.x / view.s) * k, (-view.y / view.s) * k, (vr.width / view.s) * k, (vr.height / view.s) * k);
-  }
-
-  if (minimap) {
-    let mmDrag = false;
-    const jump = (e) => {
-      const r = minimap.getBoundingClientRect();
-      const wx = ((e.clientX - r.left) / r.width) * WORLD.w;
-      const wy = ((e.clientY - r.top) / r.height) * WORLD.h;
-      setView(centeredOn(wx, wy, view.s));
-    };
-    minimap.addEventListener('pointerdown', (e) => {
-      mmDrag = true;
-      minimap.setPointerCapture(e.pointerId);
-      jump(e);
-    });
-    minimap.addEventListener('pointermove', (e) => mmDrag && jump(e));
-    minimap.addEventListener('pointerup', () => { mmDrag = false; });
-    minimap.addEventListener('pointercancel', () => { mmDrag = false; });
-  }
-
   window.addEventListener('resize', () => {
     clampView();
     apply();
@@ -566,21 +550,16 @@ export function createBoard({ viewport, world, layer, minimap, handlers }) {
     reset,
     fit,
     zoomBy,
-    zoomTo: (s) => {
-      const a = visibleArea();
-      const r = viewport.getBoundingClientRect();
-      zoomAt(s, r.left + a.left + a.width / 2, r.top + a.top + a.height / 2, true);
-    },
     panBy: (dx, dy) => animateTo({ x: view.x + dx, y: view.y + dy }, 200),
     toWorld,
     findSpot,
     clampPos,
     reveal,
-    flashWhenReady(id) {
-      const item = items.get(id);
-      if (item) flash(item.el);
-      else flashId = id;
-    },
+    focusOn,
+    hold,
+    release,
+    select,
+    elementOf: (id) => items.get(id)?.el ?? null,
     get maxZ() {
       return maxZ;
     },

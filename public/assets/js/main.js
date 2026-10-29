@@ -1,13 +1,13 @@
-// Guestnote 시작점: 날짜별 보드를 열고, 글쓰기·보기·달력·설정을 연결해요.
+// Guestnote 시작점: 날짜별 보드를 열고, 보드에 바로 쓰기·글 고르기·달력·설정을 연결해요.
 import userConfig from '../../config.js';
 import { $, toast, setupDialog, anyDialogOpen, errorMessage } from './ui.js';
 import { dayKey, isDayKey, addDays, describeDay, dayHue, msUntilNextDay } from './dates.js';
 import { createStore } from './store.js';
 import { createBoard } from './board.js';
-import { createComposer } from './composer.js';
-import { createDetail } from './detail.js';
+import { createWriter } from './writer.js';
+import { createSelection } from './selection.js';
 import { createCalendar } from './calendar.js';
-import { noteWidth, estimateHeight } from './notes.js';
+import { isSafeImageUrl } from './image.js';
 
 const config = {
   siteTitle: 'Guestnote',
@@ -29,6 +29,8 @@ const todayKey = () => dayKey(new Date(), tz);
 const PREF_THEME = 'guestnote:theme';
 const PREF_LITE = 'guestnote:lite';
 const LITE_AUTO_AT = 80;
+const PREF_TIP = 'guestnote:tip-move';
+const PAST_ONLY_READ = '지난 보드는 읽기만 할 수 있어요. 글은 오늘 보드에 남겨 주세요.';
 
 const state = {
   store: null,
@@ -40,6 +42,7 @@ const state = {
 
 const root = document.documentElement;
 const viewport = $('#viewport');
+const dock = $('#dock');
 
 // ---------- 저장해 둔 화면 설정 ----------
 function pref(key) {
@@ -102,6 +105,7 @@ function renderHeader() {
   document.body.classList.toggle('is-past', !isToday);
   document.title = isToday ? `${config.siteTitle} ${config.siteSubtitle}` : `${d.month}월 ${d.day}일의 보드 - ${config.siteTitle}`;
   updateCountdown();
+  renderDock();
 }
 
 function updateCountdown() {
@@ -110,7 +114,6 @@ function updateCountdown() {
   const mins = Math.max(1, Math.ceil((left % 3_600_000) / 60_000));
   const text = hrs ? `${hrs}시간 ${mins === 60 ? 0 : mins}분` : `${mins}분`;
   $('#resetChip').textContent = `새 보드까지 ${text}`;
-  $('#infoReset').textContent = `오늘 보드는 ${text} 뒤에 닫히고, 자정에 새 보드가 열려요.`;
 }
 
 // ---------- 보드 안내 문구 ----------
@@ -120,7 +123,7 @@ function setBoardMessage(kind) {
   const messages = {
     loading: ['보드를 펼치는 중…', ''],
     empty: isToday
-      ? ['오늘의 첫 글을 남겨 주세요', '빈 곳을 두 번 누르면 그 자리에 붙어요.']
+      ? ['오늘의 첫 글을 남겨 주세요', '빈 곳을 두 번 누르면 그 자리에 바로 쓸 수 있어요.']
       : ['이 날에는 남겨진 글이 없어요', '날짜를 눌러 달력에서 다른 날을 골라 보세요.'],
     error: ['보드를 불러오지 못했어요', '인터넷 연결을 확인하고 새로고침해 주세요.'],
   };
@@ -133,15 +136,26 @@ function setBoardMessage(kind) {
   }
 }
 
+// ---------- 아래 막대 ----------
+// 쓰는 중 > 글을 고른 중 > 오늘 / 지난 보드 순서로 보여 줘요.
+function renderDock() {
+  dock.dataset.mode = writer?.active ? 'write'
+    : selection?.active ? 'pick'
+      : state.view === state.today ? 'today' : 'past';
+  // 쓰는 동안에는 보드 가운데의 큰 안내 글씨를 감춰요.
+  $('#boardMessage').classList.toggle('is-hushed', !!writer?.active);
+}
+
 // ---------- 권한 ----------
+// 지난 보드는 관리자도 읽기만 해요. (firestore.rules 와 같아요)
 const perms = {
   isMine: (n) => !!state.store?.uid && n.ownerId === state.store.uid,
-  canMove: (n) => !!state.store?.canWrite && (state.store.isAdmin || (perms.isMine(n) && n.date === state.today)),
-  canEdit: (n) => !!state.store?.canWrite && perms.isMine(n) && n.date === state.today,
-  canDelete: (n) => !!state.store?.canWrite && (perms.isMine(n) || state.store.isAdmin),
+  canMove: (n) => !!state.store?.canWrite && n.date === state.today && (state.store.isAdmin || perms.isMine(n)),
+  canEdit: (n) => !!state.store?.canWrite && n.date === state.today && perms.isMine(n),
+  canDelete: (n) => !!state.store?.canWrite && n.date === state.today && (state.store.isAdmin || perms.isMine(n)),
 };
 
-const boardCtx = () => ({ uid: state.store?.uid, timeZone: tz, canMove: perms.canMove });
+const boardCtx = () => ({ uid: state.store?.uid, canMove: perms.canMove });
 
 // ---------- 날짜 이동 ----------
 function routeKey() {
@@ -155,6 +169,15 @@ function urlFor(key) {
 
 function goTo(key) {
   const target = key > state.today ? state.today : key;
+  // 쓰던 글이 있으면 지난 보드로 가기 전에 먼저 올리거나 그만두게 해요.
+  if (writer?.active && target !== state.today) {
+    if (!writer.isEmpty) {
+      toast('쓰던 글을 먼저 올리거나 취소해 주세요.');
+      writer.focus();
+      return;
+    }
+    writer.cancel();
+  }
   if (target !== routeKey() || (target === state.today && location.hash)) history.pushState(null, '', urlFor(target));
   openDay(target);
 }
@@ -162,26 +185,29 @@ function goTo(key) {
 function openDay(key) {
   if (!state.store) return;
   if (state.view === key && state.unsub) return;
+  if (key !== state.today) writer?.cancel();
+  selection?.clear();
   state.unsub?.();
   state.unsub = null;
   state.view = key;
   state.notes = [];
   applyLight(key);
-  renderHeader();
   board.reset();
+  renderHeader();
   setBoardMessage('loading');
   let first = true;
   state.unsub = state.store.subscribeDay(key, (notes) => {
     if (state.view !== key) return;
     state.notes = notes;
     board.setNotes(notes, boardCtx());
-    detail?.sync(notes);
+    selection?.sync(notes);
     if (key === state.today) calendar?.noteCountChanged(key, notes.length);
     setBoardMessage(notes.length ? null : 'empty');
     applyLite();
     if (first) {
       first = false;
-      board.fit({ animate: false });
+      // 쓰는 중이면 보던 자리를 그대로 둬요.
+      if (!writer?.active) board.fit({ animate: false });
     }
   }, (err) => {
     console.error(err);
@@ -196,12 +222,16 @@ function openDay(key) {
   });
 }
 
-// 자정이 지나면 오늘 보드를 새로 열어요.
+// 자정이 지나면 오늘 보드를 새로 열어요. 쓰던 새 글은 그대로 두고 새 보드에 올려요.
 function checkDay() {
   const now = todayKey();
   if (now !== state.today) {
     const wasToday = state.view === state.today;
     state.today = now;
+    if (writer?.editingId) {
+      writer.cancel();
+      toast('자정이 지나서 어제 글은 더 고칠 수 없어요.', { duration: 5200 });
+    }
     if (wasToday && state.store) {
       history.replaceState(null, '', location.pathname + location.search);
       openDay(now);
@@ -216,38 +246,31 @@ function checkDay() {
 }
 
 // ---------- 글쓰기 ----------
-function startWriting({ at = null, file = null } = {}) {
+// at: 글상자를 열 보드 좌표, file: 처음부터 넣을 사진
+function startWriting(opts = {}) {
   if (!state.store) return;
   if (!state.store.canWrite) {
-    askSignIn({ at, file });
+    askSignIn(opts);
     return;
   }
   if (state.view !== state.today) goTo(state.today);
-  composer.open({ at, file, defaultAuthor: state.store.user?.name });
+  selection.clear();
+  writer.start({ ...opts, defaultAuthor: state.store.user?.name ?? '' });
 }
 
-function randomTilt() {
-  return Math.round((Math.random() * 5 - 2.5) * 10) / 10;
-}
-
-async function submitNote({ mode, note, at, data, image }) {
+async function submitNote({ mode, note, id, data, image, pos }) {
   if (mode === 'edit') {
-    await state.store.updateNote(note, data, image);
+    await state.store.updateNote(note, { ...data, x: pos.x, y: pos.y }, image);
     toast('고친 내용을 저장했어요.');
     return;
   }
   checkDay();
-  const date = state.today;
-  if (state.view !== date) goTo(date);
-  const w = noteWidth(data.type);
-  const hgt = estimateHeight(data.type, !!image, data.text);
-  const pos = at ? board.clampPos(at.x - w / 2, at.y - 36, w, hgt) : board.findSpot(w, hgt);
-  const created = await state.store.createNote({
-    ...data, date, x: pos.x, y: pos.y, z: board.maxZ + 1, rot: randomTilt(),
-  }, image);
-  board.flashWhenReady(created.id);
-  board.reveal({ x: pos.x, y: pos.y, w, h: hgt });
-  toast('보드에 붙였어요. 내 글은 끌어서 옮길 수 있어요.');
+  await state.store.createNote({ ...data, date: state.today, x: pos.x, y: pos.y, z: board.maxZ + 1 }, image, id);
+  // 처음 한 번만 옮기는 방법을 알려 줘요.
+  if (!pref(PREF_TIP)) {
+    setPref(PREF_TIP, '1');
+    toast('보드에 붙였어요. 내 글은 오늘 안에서 끌어서 옮길 수 있어요.', { duration: 4200 });
+  }
 }
 
 async function moveNote(note, pos) {
@@ -262,45 +285,56 @@ async function moveNote(note, pos) {
 // ---------- 화면 요소 연결 ----------
 function chromeInsets() {
   const top = $('.topbar').getBoundingClientRect().bottom + 12;
-  const dock = $('.dock').getBoundingClientRect();
-  const bottom = dock.height ? window.innerHeight - dock.top + 12 : 24;
+  const bar = dock.getBoundingClientRect();
+  const bottom = bar.height ? window.innerHeight - bar.top + 12 : 24;
   return { top, bottom, left: 16, right: 16 };
 }
 
-let lastZoomLabel = '';
 const board = createBoard({
   viewport,
   world: $('#world'),
   layer: $('#notes'),
-  minimap: $('#minimap'),
   handlers: {
     insets: chromeInsets,
-    onView(view) {
-      const label = `${Math.round(view.s * 100)}%`;
-      if (label !== lastZoomLabel) {
-        lastZoomLabel = label;
-        $('#zoomLabel').textContent = label;
+    onSelect(note, { keyboard } = {}) {
+      if (!writer.active) selection?.select(note, { keyboard });
+    },
+    // 두 번 누르면: 고칠 수 있는 내 글은 바로 고치고, 사진은 크게 봐요.
+    onActivate(note) {
+      if (writer.active) return;
+      if (perms.canEdit(note)) {
+        selection?.clear();
+        writer.start({ note });
+      } else if (isSafeImageUrl(note.img)) {
+        selection?.openPhoto(note);
       }
     },
-    onOpen: (note) => detail?.open(note),
-    onMove: moveNote,
+    onEmptyTap() {
+      selection?.clear();
+      writer.dismissIfEmpty();
+    },
     onEmptyActivate(at) {
       if (state.view !== state.today) {
-        toast('지난 보드에는 글을 남길 수 없어요. 오늘 보드에 남겨 주세요.');
+        toast(PAST_ONLY_READ);
         return;
       }
       startWriting({ at });
     },
+    onMove: moveNote,
   },
 });
 
-const composer = createComposer({
-  dialog: $('#composer'),
+const writer = createWriter({
+  layer: $('#drafts'),
+  bar: $('#writeBar'),
+  board,
   imageOptions: config.image,
+  newId: () => state.store.newNoteId(),
   onSubmit: submitNote,
+  onChange: renderDock,
 });
 
-let detail = null;
+let selection = null;
 let calendar = null;
 
 $('#writeBtn').addEventListener('click', () => startWriting());
@@ -309,43 +343,53 @@ $('#todayBtn').addEventListener('click', () => goTo(state.today));
 $('#prevDay').addEventListener('click', () => goTo(addDays(state.view, -1)));
 $('#nextDay').addEventListener('click', () => goTo(addDays(state.view, 1)));
 $('#dateBtn').addEventListener('click', () => calendar?.open(state.view));
-$('#zoomIn').addEventListener('click', () => board.zoomBy(1.25));
-$('#zoomOut').addEventListener('click', () => board.zoomBy(0.8));
-$('#zoomLabel').addEventListener('click', () => board.zoomTo(1));
-$('#zoomFit').addEventListener('click', () => board.fit());
 
-// 사진 파일을 보드에 끌어다 놓거나 붙여 넣으면 바로 글쓰기 창이 열려요.
+// 사진은 보드에 끌어다 놓거나 붙여 넣어도 돼요. 쓰는 중이면 그 글에, 아니면 새 글상자에 넣어요.
 const imageFileOf = (list) => [...(list ?? [])].find((f) => f.type.startsWith('image/'));
-viewport.addEventListener('dragover', (e) => {
-  if (![...e.dataTransfer.types].includes('Files')) return;
+const draggingFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files');
+
+function takeImage(file, at = null) {
+  if (writer.active) {
+    writer.attach(file);
+  } else if (state.view !== state.today) {
+    toast(PAST_ONLY_READ);
+  } else {
+    startWriting({ at, file });
+  }
+}
+
+document.addEventListener('dragover', (e) => {
+  if (!draggingFiles(e)) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'copy';
   viewport.classList.add('is-dropping');
 });
-viewport.addEventListener('dragleave', (e) => {
-  if (!viewport.contains(e.relatedTarget)) viewport.classList.remove('is-dropping');
+document.addEventListener('dragleave', (e) => {
+  if (!e.relatedTarget) viewport.classList.remove('is-dropping');
 });
-viewport.addEventListener('drop', (e) => {
-  e.preventDefault();
+document.addEventListener('drop', (e) => {
   viewport.classList.remove('is-dropping');
+  if (!draggingFiles(e)) return;
+  // 브라우저가 사진 파일을 열어 버리지 않게 막아요.
+  e.preventDefault();
+  if (anyDialogOpen()) return;
   const file = imageFileOf(e.dataTransfer.files);
-  if (!file) return;
-  if (state.view !== state.today) {
-    toast('지난 보드에는 글을 남길 수 없어요. 오늘 보드에 남겨 주세요.');
+  if (!file) {
+    toast('사진 파일만 넣을 수 있어요.', { tone: 'error' });
     return;
   }
-  startWriting({ at: board.toWorld(e.clientX, e.clientY), file });
+  takeImage(file, viewport.contains(e.target) ? board.toWorld(e.clientX, e.clientY) : null);
 });
 document.addEventListener('paste', (e) => {
-  if (anyDialogOpen() || e.target.closest?.('input, textarea')) return;
+  if (anyDialogOpen()) return;
+  // 글자는 글상자에 그대로 붙고, 사진만 따로 받아요.
   const file = imageFileOf(e.clipboardData?.files);
-  if (file) {
-    e.preventDefault();
-    startWriting({ file });
-  }
+  if (!file) return;
+  e.preventDefault();
+  takeImage(file);
 });
 
-// 단축키: + / - 확대·축소, 0 전체 보기, N 글쓰기, [ ] 날짜 이동
+// 단축키: + / - 확대·축소, 0 전체 보기, N 글쓰기, [ ] 날짜 이동, Esc 그만두기
 document.addEventListener('keydown', (e) => {
   if (anyDialogOpen() || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
@@ -353,14 +397,20 @@ document.addEventListener('keydown', (e) => {
   if (e.key === '+' || e.key === '=') board.zoomBy(1.25);
   else if (e.key === '-' || e.key === '_') board.zoomBy(0.8);
   else if (e.key === '0') board.fit();
-  else if (e.code === 'KeyN') { e.preventDefault(); startWriting(); }
-  else if (e.code === 'BracketLeft') goTo(addDays(state.view, -1));
+  else if (e.code === 'KeyN') {
+    e.preventDefault();
+    if (state.view === state.today) startWriting();
+    else toast(PAST_ONLY_READ);
+  } else if (e.key === 'Escape') {
+    if (writer.active) writer.cancel();
+    else selection?.clear({ refocus: true });
+  } else if (e.code === 'BracketLeft') goTo(addDays(state.view, -1));
   else if (e.code === 'BracketRight' && state.view < state.today) goTo(addDays(state.view, 1));
   else if (!onNote && e.key.startsWith('Arrow')) {
     const d = { ArrowLeft: [1, 0], ArrowRight: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
     e.preventDefault();
     board.panBy(d[0] * 120, d[1] * 120);
-  } else return;
+  }
 });
 
 window.addEventListener('popstate', () => openDay(routeKey()));
@@ -368,6 +418,23 @@ window.addEventListener('hashchange', () => openDay(routeKey()));
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) checkDay();
 });
+
+// 휴대폰 키보드가 올라오면 아래 막대(글쓰기 도구)를 키보드 바로 위로 올리고, 글상자가 보이게 옮겨요.
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  let lastKb = 0;
+  const syncKeyboard = () => {
+    const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+    if (kb === lastKb) return;
+    lastKb = kb;
+    root.style.setProperty('--kb', `${kb}px`);
+    if (writer.active) requestAnimationFrame(() => writer.reveal());
+  };
+  vv.addEventListener('resize', syncKeyboard);
+  vv.addEventListener('scroll', syncKeyboard);
+}
+// 알림은 아래 막대 바로 위에 떠요. 막대 높이가 바뀌면 같이 올라가요.
+new ResizeObserver(() => root.style.setProperty('--dock-h', `${dock.offsetHeight}px`)).observe(dock);
 
 // ---------- Google 로그인 ----------
 // 카카오톡 같은 앱 안의 브라우저에서는 Google이 로그인을 막아서, 다른 브라우저로 열도록 안내해요.
@@ -467,6 +534,7 @@ $('#copyLink').addEventListener('click', async (e) => {
   setTimeout(() => { btn.textContent = '주소 복사'; }, 2500);
 });
 
+// ---------- 프로필: 화면 설정과 로그아웃 ----------
 function renderAccount() {
   const btn = $('#accountBtn');
   const user = state.store?.user;
@@ -474,7 +542,7 @@ function renderAccount() {
   if (user) {
     const label = user.name || user.email || '내 계정';
     btn.textContent = [...label.trim()][0]?.toUpperCase() ?? '나';
-    btn.setAttribute('aria-label', `${label} 계정, 로그아웃은 안내 창에서 할 수 있어요`);
+    btn.setAttribute('aria-label', `${label} 계정, 화면 설정과 로그아웃`);
     btn.title = label;
   } else {
     btn.textContent = '로그인';
@@ -483,70 +551,31 @@ function renderAccount() {
   }
 }
 
+const profile = setupDialog($('#profile'));
+
 $('#accountBtn').addEventListener('click', () => {
   if (!state.store) return;
-  if (state.store.user) {
-    renderInfo();
-    info.open();
-  } else {
-    askSignIn();
-  }
-});
-
-// ---------- 안내와 설정 ----------
-const info = setupDialog($('#info'));
-$('#infoBtn').addEventListener('click', () => {
-  renderInfo();
-  info.open();
-});
-$('#adminChip').addEventListener('click', () => {
-  renderInfo();
-  info.open();
-});
-
-function renderInfo() {
-  const user = state.store?.user;
-  $('#infoAccount').textContent = user
-    ? `${user.name || '이름 없음'}${user.email ? ` (${user.email})` : ''}${state.store.isAdmin ? ', 관리자' : ''}`
-    : '로그인하지 않았어요. 글을 남기려면 Google로 로그인해 주세요.';
-  $('#accountAction').textContent = user ? '로그아웃' : 'Google로 로그인';
-  $('#adminDetails').hidden = !user;
-  $('#infoUid').textContent = user?.uid ?? '';
-
-  const theme = pref(PREF_THEME) ?? 'auto';
-  for (const r of document.querySelectorAll('input[name="theme"]')) r.checked = r.value === theme;
-  $('#liteToggle').checked = root.classList.contains('lite');
-  updateCountdown();
-}
-
-$('#accountAction').addEventListener('click', async () => {
-  if (!state.store?.user) {
-    info.close();
+  if (!state.store.user) {
     askSignIn();
     return;
   }
+  const theme = pref(PREF_THEME) ?? 'auto';
+  for (const r of document.querySelectorAll('input[name="theme"]')) r.checked = r.value === theme;
+  $('#liteToggle').checked = root.classList.contains('lite');
+  profile.open();
+});
+
+$('#signOutBtn').addEventListener('click', async () => {
   try {
     await state.store.signOut();
-    info.close();
+    profile.close();
     toast('로그아웃했어요.');
   } catch {
     toast('로그아웃하지 못했어요. 잠시 후 다시 시도해 주세요.', { tone: 'error' });
   }
 });
 
-// 안내 창이 열려 있으면 알림이 창 뒤에 가려져서, 버튼 글자로 결과를 알려요.
-$('#copyUid').addEventListener('click', async (e) => {
-  const btn = e.currentTarget;
-  try {
-    await navigator.clipboard.writeText(state.store.uid);
-    btn.textContent = '복사했어요';
-  } catch {
-    btn.textContent = '직접 복사해 주세요';
-  }
-  setTimeout(() => { btn.textContent = '복사'; }, 2000);
-});
-
-$('#info').addEventListener('change', (e) => {
+$('#profile').addEventListener('change', (e) => {
   if (e.target.name === 'theme') {
     const v = e.target.value === 'auto' ? null : e.target.value;
     setPref(PREF_THEME, v);
@@ -557,17 +586,13 @@ $('#info').addEventListener('change', (e) => {
   }
 });
 
-function renderAdminChip() {
-  $('#adminChip').hidden = !state.store?.isAdmin;
-}
-
 // 로그인하거나 로그아웃하면 '내 글' 표시와 옮기기 권한을 다시 그려요.
 function onAuthChanged() {
+  if (!state.store.user) writer.cancel();
   board.setNotes(state.notes, boardCtx());
-  detail?.refresh();
+  selection.refresh();
   renderAccount();
-  renderAdminChip();
-  if ($('#info').open) renderInfo();
+  $('#adminChip').hidden = !state.store.isAdmin;
 }
 
 // ---------- 시작 ----------
@@ -589,13 +614,15 @@ try {
 }
 
 if (state.store) {
-  detail = createDetail({
-    dialog: $('#detail'),
+  selection = createSelection({
+    bar: $('#pickBar'),
+    viewer: $('#viewer'),
     store: state.store,
     timeZone: tz,
     permissions: perms,
-    onEdit: (note) => composer.open({ mode: 'edit', note }),
-    onDeleted: () => toast('글을 지웠어요.'),
+    board,
+    onEdit: (note) => writer.start({ note }),
+    onChange: renderDock,
   });
   calendar = createCalendar({
     dialog: $('#calendar'),
@@ -603,7 +630,7 @@ if (state.store) {
     getToday: () => state.today,
     onPick: goTo,
   });
-  renderAdminChip();
+  $('#adminChip').hidden = !state.store.isAdmin;
   renderAccount();
   state.store.onAuthChange(onAuthChanged);
   const start = routeKey();

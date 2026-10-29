@@ -70,20 +70,55 @@ export async function makePhoto(browser, width = 2400, height = 1600) {
   return buffer;
 }
 
-export async function compose(page, { type = 'guest', author, text = '', tint = 'clear', photo, at } = {}) {
+// 보드에 바로 글을 써서 올려요. at(화면 좌표)을 주면 그 자리를 두 번 눌러 글상자를 열어요.
+export async function write(page, { at, text = '', style = 'text', tint = 'clear', author, photo } = {}) {
   if (at) await page.mouse.dblclick(at.x, at.y);
   else await page.click('#writeBtn');
-  await page.waitForSelector('#composer[open]');
-  await page.check(`#composer input[name=type][value=${type}]`, { force: true });
-  if (author !== undefined) await page.fill('#composer input[name=author]', author);
-  await page.fill('#composer textarea[name=text]', text);
-  await page.check(`#composer .swatch[data-tint=${tint}] input`, { force: true });
+  await page.waitForSelector('.is-draft textarea');
+  await page.check(`#writeBar input[name=style][value=${style}]`, { force: true });
+  await page.check(`#writeBar input[name=tint][value=${tint}]`, { force: true });
+  if (author !== undefined) await page.fill('.is-draft .draft__name', author);
+  await page.fill('.is-draft textarea', text);
   if (photo) {
     await page.setInputFiles('#photoInput', { name: 'photo.png', mimeType: 'image/png', buffer: photo });
-    await page.waitForSelector('#photoPreview:not([hidden])', { timeout: 30_000 });
+    await page.waitForSelector('.is-draft .draft__photo:not(.is-working) img[src^="data:image/"]', { timeout: 30_000 });
   }
-  await page.click('#composerSubmit');
-  await page.waitForFunction(() => !document.querySelector('#composer').open, null, { timeout: 15_000 });
+  await page.click('#writeSubmit');
+  await page.waitForSelector('.is-draft', { state: 'detached', timeout: 15_000 });
+}
+
+// 클립보드에서 사진을 붙여 넣은 것처럼 해요.
+export async function pasteImage(page, buffer) {
+  await page.evaluate((b64) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], 'pasted.png', { type: 'image/png' }));
+    document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, buffer.toString('base64'));
+}
+
+// 사진 파일을 화면의 한 점에 끌어다 놓은 것처럼 해요.
+export async function dropImage(page, buffer, { x, y }) {
+  await page.evaluate(([b64, cx, cy]) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], 'dropped.png', { type: 'image/png' }));
+    const target = document.elementFromPoint(cx, cy);
+    for (const type of ['dragenter', 'dragover', 'drop']) {
+      target.dispatchEvent(new DragEvent(type, { dataTransfer: dt, clientX: cx, clientY: cy, bubbles: true, cancelable: true }));
+    }
+  }, [buffer.toString('base64'), x, y]);
+}
+
+// 로그인한 계정의 ID (Firebase가 브라우저에 저장해 둔 값)
+export function uidOf(page) {
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    const open = indexedDB.open('firebaseLocalStorageDb');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const all = open.result.transaction('firebaseLocalStorage', 'readonly').objectStore('firebaseLocalStorage').getAll();
+      all.onerror = () => reject(all.error);
+      all.onsuccess = () => resolve(all.result.find((r) => r.fbase_key.startsWith('firebase:authUser:'))?.value?.uid ?? null);
+    };
+  }));
 }
 
 export async function dragBy(page, locator, dx, dy) {

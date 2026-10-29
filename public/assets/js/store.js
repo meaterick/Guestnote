@@ -152,8 +152,13 @@ export async function createStore(config) {
       }, onError);
     },
 
-    async createNote(data, image) {
-      const ref = F.doc(notesCol);
+    // 새 글의 id를 미리 받아 두면, 저장되는 동안 보드에 먼저 나타나는 글을 알아볼 수 있어요.
+    newNoteId() {
+      return F.doc(notesCol).id;
+    },
+
+    async createNote(data, image, id = F.doc(notesCol).id) {
+      const ref = noteRef(id);
       const batch = F.writeBatch(db);
       const note = {
         ...data,
