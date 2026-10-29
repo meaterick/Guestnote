@@ -1,0 +1,20 @@
+{
+  "name": "guestnote",
+  "version": "1.0.0",
+  "private": true,
+  "description": "날마다 새로 열리는 유리 보드 방명록",
+  "type": "module",
+  "scripts": {
+    "start": "node tests/serve.mjs",
+    "test": "npm run test:unit && npm run test:e2e && npm run test:firebase",
+    "test:unit": "node --test tests/unit.test.mjs",
+    "test:e2e": "node --test tests/e2e-local.test.mjs",
+    "test:firebase": "firebase emulators:exec --only firestore,auth --project demo-guestnote \"node --test --test-concurrency=1 tests/rules.test.mjs tests/e2e-firebase.test.mjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.2",
+    "firebase": "12.19.0",
+    "firebase-tools": "15.34.2",
+    "playwright": "1.63.0"
+  }
+}

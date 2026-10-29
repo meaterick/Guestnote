@@ -1,0 +1,8 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    { "collectionGroup": "notes", "fieldPath": "img", "indexes": [] },
+    { "collectionGroup": "notes", "fieldPath": "text", "indexes": [] },
+    { "collectionGroup": "images", "fieldPath": "data", "indexes": [] }
+  ]
+}
