@@ -10,7 +10,8 @@ const errorLists = [];
 
 async function open(options = {}, { clock } = {}) {
   const context = await app.browser.newContext({ viewport: { width: 1280, height: 820 }, locale: 'ko-KR', timezoneId: 'Asia/Seoul', ...options });
-  await prepare(context);
+  // config.js 에 실제 Firebase 설정이 있어도, 이 테스트는 로컬 모드로 돌려요.
+  await prepare(context, { config: { firebase: null } });
   const page = await context.newPage();
   errorLists.push(collectErrors(page));
   if (clock) await page.clock.install({ time: clock });

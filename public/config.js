@@ -9,18 +9,18 @@ export default {
   // 바꾸면 firebase/firestore.rules 의 utcOffsetHours() 도 같은 값으로 맞춰 주세요.
   timeZone: 'Asia/Seoul',
 
-  // Firebase 웹 앱 설정을 붙여 넣으면 방문자 모두가 같은 보드를 보게 돼요.
-  // 비워 두면(null) '로컬 모드'로 동작해서 글이 각자의 브라우저에만 저장돼요.
-  // 설정 방법은 README.md 의 'Firebase 연결하기'를 참고하세요.
-  firebase: null,
-  // firebase: {
-  //   apiKey: 'AIza...',
-  //   authDomain: 'my-guestnote.firebaseapp.com',
-  //   projectId: 'my-guestnote',
-  //   storageBucket: 'my-guestnote.firebasestorage.app',
-  //   messagingSenderId: '1234567890',
-  //   appId: '1:1234567890:web:abcdef',
-  // },
+  // Firebase 웹 앱 설정이에요. 방문자 모두가 같은 보드를 보게 돼요.
+  // null 로 바꾸면 '로컬 모드'로 동작해서 글이 각자의 브라우저에만 저장돼요.
+  // 이 값은 비밀번호가 아니라 프로젝트를 가리키는 이름표라 공개돼도 괜찮아요. (데이터는 보안 규칙이 지켜요)
+  firebase: {
+    apiKey: 'AIzaSyCCtrhYJBnY5iqPTwS2Z95LQTQwkK5p8pc',
+    authDomain: 'note-5997b.firebaseapp.com',
+    projectId: 'note-5997b',
+    storageBucket: 'note-5997b.firebasestorage.app',
+    messagingSenderId: '347832250387',
+    appId: '1:347832250387:web:0a68a613b370d1ed5b0fe6',
+    measurementId: 'G-MN9V443NPJ',
+  },
 
   // 개발용: 로컬 Firebase 에뮬레이터에 연결할 때만 채워요.
   // emulator: { host: '127.0.0.1', firestorePort: 8080, authPort: 9099 },
