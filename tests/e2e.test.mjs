@@ -156,6 +156,27 @@ test('메모장 모양과 색을 골라서 쓸 수 있어요', async () => {
   assert.deepEqual(await memo.evaluate((el) => [el.classList.contains('note--memo'), el.dataset.tint]), [true, 'rose']);
 });
 
+test('Enter로 바로 올리고, Shift+Enter로 줄을 바꿔요', async () => {
+  await alice.click('#writeBtn');
+  const box = alice.locator('.is-draft textarea');
+  await box.waitFor();
+  await alice.keyboard.type('첫 줄');
+  await alice.keyboard.press('Shift+Enter');
+  await alice.keyboard.type('둘째 줄');
+  assert.equal(await box.inputValue(), '첫 줄\n둘째 줄');
+  // 한글을 조합하는 중에 누른 Enter는 글자를 마무리할 뿐 올리지 않아요.
+  await box.evaluate((el) => {
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true }));
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 229, bubbles: true, cancelable: true }));
+  });
+  assert.equal(await alice.locator('.is-draft').count(), 1);
+  await alice.keyboard.press('Enter');
+  await alice.waitForSelector('.is-draft', { state: 'detached', timeout: 15_000 });
+  const posted = bob.locator('.note', { hasText: '둘째 줄' });
+  await posted.waitFor({ timeout: 10_000 });
+  assert.equal(await posted.locator('.note__text').textContent(), '첫 줄\n둘째 줄');
+});
+
 test('내 글을 끌어서 옮기면 다른 사람 화면에도 반영되고, 새로고침해도 그 자리예요', async () => {
   const mine = alice.locator('.note', { hasText: '실시간으로 보이나요?' });
   const before = await translateOf(mine);

@@ -72,7 +72,7 @@
   </header>
 
   <main class="viewport" id="viewport" aria-label="방명록 보드" aria-describedby="boardHelp">
-    <p class="sr-only" id="boardHelp">보드를 끌거나 휠을 굴려 둘러볼 수 있어요. Ctrl과 휠, 또는 두 손가락으로 확대하고 줄여요. 빈 곳을 두 번 누르거나 N 키를 누르면 그 자리에 바로 글을 써요. 글은 Tab으로 차례대로 가서 Enter로 고르고, 내 글은 화살표 키로 옮겨요.</p>
+    <p class="sr-only" id="boardHelp">보드를 끌거나 휠을 굴려 둘러볼 수 있어요. Ctrl과 휠, 또는 두 손가락으로 확대하고 줄여요. 빈 곳을 두 번 누르거나 N 키를 누르면 그 자리에 바로 글을 쓰고, Enter로 올려요. 줄은 Shift+Enter로 바꿔요. 글은 Tab으로 차례대로 가서 Enter로 고르고, 내 글은 화살표 키로 옮겨요.</p>
     <div class="world" id="world">
       <div class="sheet" aria-hidden="true"></div>
       <div class="board-message" id="boardMessage" role="status">
@@ -122,7 +122,7 @@
       <input type="file" id="photoInput" accept="image/*" hidden>
       <div class="tools__end">
         <button class="btn btn--small" id="writeCancel" type="button">취소</button>
-        <button class="btn btn--small btn--primary" id="writeSubmit" type="button">올리기</button>
+        <button class="btn btn--small btn--primary" id="writeSubmit" type="button" title="Enter로도 올려요. 줄을 바꾸려면 Shift+Enter">올리기</button>
       </div>
     </div>
   </div>

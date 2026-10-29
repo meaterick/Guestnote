@@ -46,7 +46,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
   function build() {
     const text = h('textarea', {
       class: 'draft__text', rows: '1', cols: '1', maxlength: String(LIMITS.text),
-      placeholder: '여기에 바로 적어요', 'aria-label': '글 내용', enterkeyhint: 'enter',
+      placeholder: '여기에 바로 적어요', 'aria-label': '글 내용', enterkeyhint: 'send',
     });
     const grow = h('div', { class: 'note__text draft__grow' }, text);
     const img = h('img', { alt: '넣은 사진', draggable: 'false' });
@@ -56,7 +56,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
       img, h('span', { class: 'draft__busy', text: '사진을 줄이는 중…' }), unphoto);
     const name = h('input', {
       class: 'note__sign draft__name', maxlength: String(LIMITS.author), placeholder: '이름',
-      'aria-label': '이름', autocomplete: 'nickname', enterkeyhint: 'done',
+      'aria-label': '이름', autocomplete: 'nickname', enterkeyhint: 'send',
     });
     const el = h('div', { class: 'note is-draft', role: 'group', 'aria-label': '쓰는 중인 글' },
       fig, grow, h('footer', { class: 'note__foot' }, h('span', { class: 'note__dash', text: '—', 'aria-hidden': 'true' }), name));
@@ -68,9 +68,11 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
       board.reveal(rect());
     });
     unphoto.addEventListener('click', removePhoto);
+    // Enter로 바로 올리고, 줄은 Shift+Enter로 바꿔요.
+    // 한글처럼 글자를 조합하는 중에 누른 Enter는 그 글자를 마무리하는 키라서 올리지 않아요. (두 번 올라가거나 마지막 글자가 빠지지 않게)
     el.addEventListener('keydown', (e) => {
-      if (e.isComposing) return;
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || e.target === name)) {
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === 'Enter' && !e.shiftKey && (e.target === text || e.target === name)) {
         e.preventDefault();
         commit();
       } else if (e.key === 'Escape') {
