@@ -1,5 +1,5 @@
 // Firestore 보안 규칙 테스트 (Firebase 에뮬레이터에서 실행)
-// 실행: npm run test:firebase
+// 실행: npm run test:e2e (브라우저 테스트와 함께 Firebase 에뮬레이터에서 돌아요)
 import { test, before, after, beforeEach } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';

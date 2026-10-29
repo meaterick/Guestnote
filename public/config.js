@@ -9,9 +9,8 @@ export default {
   // 바꾸면 firebase/firestore.rules 의 utcOffsetHours() 도 같은 값으로 맞춰 주세요.
   timeZone: 'Asia/Seoul',
 
-  // Firebase 웹 앱 설정이에요. 방문자 모두가 같은 보드를 보게 돼요.
-  // null 로 바꾸면 '로컬 모드'로 동작해서 글이 각자의 브라우저에만 저장돼요.
-  // 이 값은 비밀번호가 아니라 프로젝트를 가리키는 이름표라 공개돼도 괜찮아요. (데이터는 보안 규칙이 지켜요)
+  // Firebase 웹 앱 설정 (프로젝트 설정 → 내 앱에서 복사한 값)
+  // 비밀번호가 아니라 프로젝트를 가리키는 이름표라 공개돼도 괜찮아요. 데이터는 보안 규칙이 지켜요.
   firebase: {
     apiKey: 'AIzaSyCCtrhYJBnY5iqPTwS2Z95LQTQwkK5p8pc',
     authDomain: 'note-5997b.firebaseapp.com',
@@ -22,8 +21,7 @@ export default {
     measurementId: 'G-MN9V443NPJ',
   },
 
-  // 개발용: 로컬 Firebase 에뮬레이터에 연결할 때만 채워요.
-  // emulator: { host: '127.0.0.1', firestorePort: 8080, authPort: 9099 },
+  // 테스트용: Firebase 에뮬레이터에 연결할 때만 채워요. (테스트가 알아서 채워요)
   emulator: null,
 
   // 사진은 올리기 전에 브라우저에서 줄여요. (용량 단위: 바이트)

@@ -2,7 +2,7 @@
 import userConfig from '../../config.js';
 import { $, toast, setupDialog, anyDialogOpen, errorMessage } from './ui.js';
 import { dayKey, isDayKey, addDays, describeDay, dayHue, msUntilNextDay } from './dates.js';
-import { createStore } from './store/index.js';
+import { createStore } from './store.js';
 import { createBoard } from './board.js';
 import { createComposer } from './composer.js';
 import { createDetail } from './detail.js';
@@ -13,7 +13,6 @@ const config = {
   siteTitle: 'Guestnote',
   siteSubtitle: '오늘의 방명록',
   timeZone: 'Asia/Seoul',
-  firebase: null,
   emulator: null,
   ...userConfig,
   image: {
@@ -219,7 +218,7 @@ function checkDay() {
 // ---------- 글쓰기 ----------
 function startWriting({ at = null, file = null } = {}) {
   if (!state.store) return;
-  if (state.store.needsSignIn && !state.store.canWrite) {
+  if (!state.store.canWrite) {
     askSignIn({ at, file });
     return;
   }
@@ -430,11 +429,8 @@ $('#openExternal').addEventListener('click', () => {
 });
 
 function renderAccount() {
-  const s = state.store;
   const btn = $('#accountBtn');
-  btn.hidden = !s?.needsSignIn;
-  if (!s?.needsSignIn) return;
-  const user = s.user;
+  const user = state.store?.user;
   btn.classList.toggle('is-signed-in', !!user);
   if (user) {
     const label = user.name || user.email || '내 계정';
@@ -449,7 +445,8 @@ function renderAccount() {
 }
 
 $('#accountBtn').addEventListener('click', () => {
-  if (state.store?.user) {
+  if (!state.store) return;
+  if (state.store.user) {
     renderInfo();
     info.open();
   } else {
@@ -463,25 +460,15 @@ $('#infoBtn').addEventListener('click', () => {
   renderInfo();
   info.open();
 });
-$('#modeChip').addEventListener('click', () => {
+$('#adminChip').addEventListener('click', () => {
   renderInfo();
   info.open();
 });
 
 function renderInfo() {
-  const s = state.store;
-  const mode = $('#infoMode');
-  if (!s) mode.textContent = '저장소에 연결하는 중이에요.';
-  else if (s.mode === 'local') mode.textContent = '로컬 모드: 글이 이 브라우저에만 저장돼요. Firebase를 연결하면 방문자 모두가 같은 보드를 봐요.';
-  else if (s.isAdmin) mode.textContent = '공유 모드: 관리자로 로그인했어요. 모든 글을 옮기거나 지울 수 있어요.';
-  else mode.textContent = '공유 모드: 방문자 모두가 같은 보드를 봐요.';
-
-  const shared = !!s?.needsSignIn;
-  const user = s?.user;
-  $('#howtoLogin').hidden = !shared;
-  $('#infoAccountRow').hidden = !shared;
+  const user = state.store?.user;
   $('#infoAccount').textContent = user
-    ? `${user.name || '이름 없음'}${user.email ? ` (${user.email})` : ''}`
+    ? `${user.name || '이름 없음'}${user.email ? ` (${user.email})` : ''}${state.store.isAdmin ? ', 관리자' : ''}`
     : '로그인하지 않았어요. 글을 남기려면 Google로 로그인해 주세요.';
   $('#accountAction').textContent = user ? '로그아웃' : 'Google로 로그인';
   $('#adminDetails').hidden = !user;
@@ -531,13 +518,8 @@ $('#info').addEventListener('change', (e) => {
   }
 });
 
-function renderModeChip() {
-  const s = state.store;
-  const chip = $('#modeChip');
-  const kind = s.mode === 'local' ? 'local' : s.isAdmin ? 'admin' : '';
-  chip.hidden = !kind;
-  chip.textContent = kind === 'local' ? '로컬 모드' : '관리자';
-  chip.dataset.kind = kind;
+function renderAdminChip() {
+  $('#adminChip').hidden = !state.store?.isAdmin;
 }
 
 // 로그인하거나 로그아웃하면 '내 글' 표시와 옮기기 권한을 다시 그려요.
@@ -545,7 +527,7 @@ function onAuthChanged() {
   board.setNotes(state.notes, boardCtx());
   detail?.refresh();
   renderAccount();
-  renderModeChip();
+  renderAdminChip();
   if ($('#info').open) renderInfo();
 }
 
@@ -582,7 +564,7 @@ if (state.store) {
     getToday: () => state.today,
     onPick: goTo,
   });
-  renderModeChip();
+  renderAdminChip();
   renderAccount();
   state.store.onAuthChange(onAuthChanged);
   const start = routeKey();

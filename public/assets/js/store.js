@@ -1,4 +1,4 @@
-// 공유 모드 저장소. Firebase Firestore에 저장하고, Google 로그인으로 '내 글'을 구분해요.
+// 저장소: Firebase Firestore에 글을 저장하고, Google 로그인으로 '내 글'을 구분해요.
 // 보드는 로그인 없이도 볼 수 있고, 실시간으로 구독해서 다른 방문자가 남기거나 옮긴 글이 바로 보여요.
 //
 // 컬렉션 구조
@@ -8,7 +8,8 @@
 
 const SDK = 'https://www.gstatic.com/firebasejs/12.19.0';
 
-export async function createFirebaseStore(config) {
+export async function createStore(config) {
+  if (!config.firebase) throw new Error('public/config.js 에 Firebase 설정이 없어요.');
   const [{ initializeApp }, A, F] = await Promise.all([
     import(`${SDK}/firebase-app.js`),
     import(`${SDK}/firebase-auth.js`),
@@ -87,8 +88,6 @@ export async function createFirebaseStore(config) {
   }
 
   return {
-    mode: 'firebase',
-    needsSignIn: true,
     get user() {
       return session.user;
     },

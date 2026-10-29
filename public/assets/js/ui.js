@@ -69,6 +69,5 @@ export function errorMessage(err, fallback = '잠시 후 다시 시도해 주세
   if (code === 'permission-denied') return '권한이 없어서 저장하지 못했어요. 날짜가 바뀌었다면 새로고침해 주세요.';
   if (code === 'unavailable' || code === 'deadline-exceeded') return '인터넷 연결이 불안정해요. 연결을 확인하고 다시 시도해 주세요.';
   if (code === 'resource-exhausted') return '오늘 사용할 수 있는 저장 용량을 다 썼어요. 내일 다시 시도해 주세요.';
-  if (err?.name === 'QuotaExceededError') return '브라우저 저장 공간이 가득 찼어요. 오래된 글이나 사진을 지워 주세요.';
   return err?.message && !code ? err.message : fallback;
 }

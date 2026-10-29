@@ -7,7 +7,7 @@
   <meta name="description" content="날마다 새로 열리는 유리 보드에 방명록과 메모, 사진을 남겨 보세요. 지난 날의 보드도 달력에서 다시 볼 수 있어요.">
   <meta name="theme-color" content="#dfe3ff">
   <!-- 사용자 글은 textContent로만 그려요. 아래 정책은 혹시 모를 스크립트 삽입을 한 번 더 막아 줘요.
-       Firebase(구글 API, Google 로그인 창)와 로컬 에뮬레이터, 구글 글꼴만 허용해요. -->
+       Firebase(구글 API, Google 로그인 창)와 개발용 에뮬레이터, 구글 글꼴만 허용해요. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://*.googleapis.com http://127.0.0.1:* http://localhost:*; frame-src https://*.firebaseapp.com https://*.web.app https://accounts.google.com http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'self'; form-action 'self'">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -58,10 +58,10 @@
     </nav>
 
     <div class="topbar__tools">
-      <button class="chip chip--mode" id="modeChip" type="button" hidden></button>
+      <button class="chip chip--admin" id="adminChip" type="button" hidden>관리자</button>
       <span class="chip chip--quiet" id="resetChip" title="보드는 매일 자정에 새로 열려요"></span>
       <button class="chip chip--today" id="todayBtn" type="button" hidden>오늘 보드로</button>
-      <button class="account-btn" id="accountBtn" type="button" hidden>로그인</button>
+      <button class="account-btn" id="accountBtn" type="button">로그인</button>
       <button class="icon-btn" id="infoBtn" type="button" aria-label="안내와 설정"><svg><use href="#i-info"/></svg></button>
     </div>
   </header>
@@ -232,7 +232,7 @@
         <button class="icon-btn" type="button" data-close aria-label="닫기"><svg><use href="#i-close"/></svg></button>
       </header>
       <ul class="howto">
-        <li id="howtoLogin" hidden>보드는 누구나 볼 수 있고, 글을 남기거나 옮길 때만 Google 계정으로 로그인해요.</li>
+        <li>보드는 누구나 볼 수 있고, 글을 남기거나 옮길 때만 Google 계정으로 로그인해요.</li>
         <li>빈 곳을 두 번 누르면 그 자리에 글을 붙일 수 있어요. 아래 ‘글 남기기’ 버튼도 돼요.</li>
         <li>내가 남긴 글은 끌어서 원하는 자리로 옮길 수 있어요. 키보드 화살표로도 움직여요.</li>
         <li>사진은 올리기 전에 브라우저에서 자동으로 줄여서, 보드에는 작은 사진만 먼저 보여요.</li>
@@ -241,11 +241,8 @@
       <p class="info__reset" id="infoReset"></p>
 
       <dl class="info__list">
-        <div><dt>저장 방식</dt><dd id="infoMode"></dd></div>
-        <div class="info__account" id="infoAccountRow" hidden>
-          <dt>내 계정</dt>
-          <dd><span id="infoAccount"></span> <button class="btn btn--small" id="accountAction" type="button">Google로 로그인</button></dd>
-        </div>
+        <dt>내 계정</dt>
+        <dd class="info__account"><span id="infoAccount"></span> <button class="btn btn--small" id="accountAction" type="button">Google로 로그인</button></dd>
       </dl>
 
       <fieldset class="field">

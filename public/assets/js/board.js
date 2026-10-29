@@ -3,7 +3,7 @@ import { clamp } from './ui.js';
 import { createNoteElement, paintNote, TINTS } from './notes.js';
 
 // 보드 크기. firestore.rules 의 좌표 범위와 같아야 해요.
-export const WORLD = { w: 4000, h: 2600 };
+const WORLD = { w: 4000, h: 2600 };
 const MIN_SCALE = 0.06;
 const MAX_SCALE = 2.4;
 const KEEP_VISIBLE = 120;
@@ -562,7 +562,6 @@ export function createBoard({ viewport, world, layer, minimap, handlers }) {
   apply();
 
   return {
-    view,
     setNotes,
     reset,
     fit,
@@ -577,19 +576,13 @@ export function createBoard({ viewport, world, layer, minimap, handlers }) {
     findSpot,
     clampPos,
     reveal,
-    visibleCenter,
     flashWhenReady(id) {
       const item = items.get(id);
       if (item) flash(item.el);
       else flashId = id;
     },
-    rectOf(id) {
-      const item = items.get(id);
-      return item ? noteRect(item) : null;
-    },
     get maxZ() {
       return maxZ;
     },
-    redrawMinimap: drawMinimapSoon,
   };
 }

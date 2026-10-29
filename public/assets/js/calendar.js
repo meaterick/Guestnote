@@ -12,7 +12,9 @@ export function createCalendar({ dialog, store, getToday, onPick }) {
   const todayBtn = $('#calToday', dialog);
   const status = $('#calStatus', dialog);
   const counts = new Map();
+  // 글이 처음 남겨진 날. 그 전 날짜는 셀 필요가 없어요. 저장소에서 한 번 불러온 뒤에만 믿어요.
   let firstDay = null;
+  let firstDayLoaded = false;
   let month = null;
   let selected = null;
   let ticket = 0;
@@ -70,7 +72,10 @@ export function createCalendar({ dialog, store, getToday, onPick }) {
     if (focusKey) grid.querySelector(`[data-key="${focusKey}"]`)?.focus();
 
     try {
-      firstDay ??= await store.firstDay();
+      if (!firstDayLoaded) {
+        firstDay = await store.firstDay();
+        firstDayLoaded = true;
+      }
       if (my !== ticket) return;
       const need = keys.filter((k) => k <= today && firstDay && k >= firstDay && (k === today || !counts.has(k)));
       if (need.length) {
@@ -140,7 +145,7 @@ export function createCalendar({ dialog, store, getToday, onPick }) {
     // 오늘 글 수가 바뀌면 달력도 새로 세요.
     noteCountChanged(key, n) {
       counts.set(key, n);
-      if (n > 0 && (!firstDay || key < firstDay)) firstDay = key;
+      if (firstDayLoaded && n > 0 && (!firstDay || key < firstDay)) firstDay = key;
     },
   };
 }

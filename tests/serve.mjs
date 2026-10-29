@@ -1,5 +1,4 @@
-// 테스트와 로컬 미리보기용 정적 서버: public/ 폴더를 그대로 보여 줘요.
-// 실행: node tests/serve.mjs  (PORT 환경 변수로 포트를 바꿀 수 있어요)
+// 브라우저 테스트용 정적 서버: public/ 폴더를 그대로 보여 줘요.
 import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';
@@ -31,10 +30,4 @@ export function startServer(port = 0) {
     }
   });
   return new Promise((done) => server.listen(port, '127.0.0.1', () => done(server)));
-}
-
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const port = Number(process.env.PORT || 4173);
-  await startServer(port);
-  console.log(`Guestnote: http://127.0.0.1:${port}/`);
 }

@@ -334,9 +334,7 @@ svg {
 button.chip:hover { background: var(--glass-fill-strong); color: var(--ink); }
 .chip--today { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 button.chip--today:hover { background: var(--accent); color: var(--accent-ink); filter: brightness(1.08); }
-.chip--mode[data-kind="local"] { background: oklch(0.93 0.08 85 / 0.75); color: #4a3a05; border-color: oklch(0.85 0.1 85 / 0.6); }
-.chip--mode[data-kind="readonly"] { background: oklch(0.92 0.06 20 / 0.75); color: #5b1622; }
-.chip--mode[data-kind="admin"] { background: var(--accent-soft); color: var(--ink); }
+.chip--admin { background: var(--accent-soft); color: var(--ink); }
 
 /* 로그인 전에는 '로그인' 글자, 로그인하면 이름 첫 글자를 담은 동그라미 */
 .account-btn {
@@ -1001,8 +999,7 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
 .admin code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12.5px; word-break: break-all; }
 .admin__uid { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--soft-fill); }
 
-.info__account { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
-.info__account dd { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.info__list dd.info__account { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 
 /* ---------- 로그인 ---------- */
 .modal--small { width: min(420px, calc(100vw - 24px)); }
@@ -1119,5 +1116,5 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
 
 @media (max-width: 360px) {
   .brand__mark { width: 28px; height: 28px; }
-  .chip--mode { display: none; }
+  .chip--admin { display: none; }
 }
