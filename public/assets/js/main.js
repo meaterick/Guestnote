@@ -16,10 +16,10 @@ const config = {
   emulator: null,
   ...userConfig,
   image: {
-    thumbSide: 640,
-    thumbBytes: 48 * 1024,
-    fullSide: 1600,
-    fullBytes: 300 * 1024,
+    thumbSide: 512,
+    thumbBytes: 32 * 1024,
+    fullSide: 1200,
+    fullBytes: 120 * 1024,
     maxInputBytes: 25 * 1024 * 1024,
     ...userConfig.image,
   },
@@ -372,16 +372,31 @@ document.addEventListener('visibilitychange', () => {
 // ---------- Google 로그인 ----------
 // 카카오톡 같은 앱 안의 브라우저에서는 Google이 로그인을 막아서, 다른 브라우저로 열도록 안내해요.
 const UA = navigator.userAgent;
+const isIOS = /iPhone|iPad|iPod/i.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1);
 const inKakao = /KAKAOTALK/i.test(UA);
-const inAppBrowser = inKakao || /FBAN|FBAV|Instagram|Line\/|NAVER\(inapp|DaumApps|everytimeApp|; wv\)/i.test(UA);
+const inInstagram = /Instagram/i.test(UA);
+const inAppBrowser = inKakao || inInstagram || /FBAN|FBAV|Line\/|NAVER\(inapp|DaumApps|everytimeApp|; wv\)/i.test(UA);
+
+// 앱 안 브라우저에서는 Google 로그인 버튼 대신 브라우저로 여는 방법을 보여 줘요.
+// 카카오톡은 바로 열기, 아이폰은 Safari로 열기, 안드로이드는 메뉴 안내와 주소 복사를 써요.
+if (inAppBrowser) {
+  const appName = inKakao ? '카카오톡' : inInstagram ? '인스타그램' : '이 앱';
+  $('#inAppHint').hidden = false;
+  $('#googleSignIn').hidden = true;
+  $('#inAppText').textContent = `${appName} 안에서 연 화면에서는 Google이 로그인을 막아요. 브라우저로 열면 바로 글을 남길 수 있어요.`;
+  const open = $('#openExternal');
+  open.hidden = !(inKakao || isIOS);
+  open.textContent = inKakao ? '다른 브라우저로 열기' : 'Safari로 열기';
+  $('#inAppTip').textContent = inKakao ? ''
+    : isIOS ? '열리지 않으면 오른쪽 위 ⋯ 메뉴에서 ‘외부 브라우저에서 열기’를 눌러 주세요.'
+      : '오른쪽 위 ⋮ 메뉴에서 ‘다른 브라우저로 열기’를 누르거나, 주소를 복사해서 크롬에 붙여 넣어 주세요.';
+}
 const signin = setupDialog($('#signin'), { onClose() { pendingWrite = null; } });
 let pendingWrite = null;
 
 function askSignIn(next = null) {
   pendingWrite = next;
   $('#signinError').hidden = true;
-  $('#inAppHint').hidden = !inAppBrowser;
-  $('#openExternal').hidden = !inKakao;
   signin.open();
 }
 
@@ -425,7 +440,31 @@ $('#googleSignIn').addEventListener('click', async (e) => {
 });
 
 $('#openExternal').addEventListener('click', () => {
-  location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(location.href)}`;
+  const url = location.href;
+  location.href = inKakao ? `kakaotalk://web/openExternal?url=${encodeURIComponent(url)}` : `x-safari-${url}`;
+});
+
+// 앱 안 브라우저는 클립보드 API를 막기도 해서, 예전 방식으로 한 번 더 시도해요.
+$('#copyLink').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  const url = location.href;
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(url);
+    copied = true;
+  } catch {
+    const field = Object.assign(document.createElement('textarea'), { value: url });
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.opacity = '0';
+    btn.after(field);
+    field.select();
+    copied = document.execCommand('copy');
+    field.remove();
+  }
+  btn.textContent = copied ? '주소를 복사했어요' : '직접 복사해 주세요';
+  if (!copied) $('#inAppTip').textContent = url;
+  setTimeout(() => { btn.textContent = '주소 복사'; }, 2500);
 });
 
 function renderAccount() {

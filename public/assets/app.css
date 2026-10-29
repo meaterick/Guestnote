@@ -1014,8 +1014,10 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
   font-size: 14px;
   line-height: 1.6;
 }
-.signin__inapp p { margin: 0 0 8px; }
-.signin__inapp p:last-child { margin: 0; }
+.signin__inapp p { margin: 0 0 10px; }
+.signin__inapp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.signin__inapp .signin__inapp-tip { margin: 0; font-size: 13px; }
+.signin__inapp-tip:empty { display: none; }
 
 .google-btn {
   display: flex;

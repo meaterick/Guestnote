@@ -36,25 +36,25 @@ service cloud.firestore {
       return isDayKey(d) && timestamp.date(int(p[0]), int(p[1]), int(p[2])) == local.date();
     }
 
-    // 브라우저에서 줄인 사진만 받아요. (WebP 또는 JPEG, base64 데이터 URL)
-    function isImageData(s, maxLength) {
-      return s is string
-        && s.size() <= maxLength
-        && s.matches('data:image/(webp|jpeg);base64,[A-Za-z0-9+/]+={0,2}');
+    // 브라우저에서 줄인 사진만 받아요. (WebP 또는 JPEG 바이트)
+    // 상한: 보드용 작은 사진 40,000바이트, 크게 보기용 사진 160,000바이트 (public/config.js 의 예산보다 넉넉하게)
+    function isImage(data, type, maxBytes) {
+      return data is bytes && data.size() > 0 && data.size() <= maxBytes
+        && type in ['image/webp', 'image/jpeg'];
     }
 
     function validImageFields(d) {
       return (!('img' in d) || (
-          isImageData(d.img, 90000)
+          isImage(d.img, d.imgType, 40000)
           && d.imgW is int && d.imgW > 0 && d.imgW <= 2048
           && d.imgH is int && d.imgH > 0 && d.imgH <= 2048
           && d.imgFull is bool))
-        && ('img' in d || (!('imgW' in d) && !('imgH' in d) && !('imgFull' in d)));
+        && ('img' in d || (!('imgType' in d) && !('imgW' in d) && !('imgH' in d) && !('imgFull' in d)));
     }
 
     function validNote(d) {
       return d.keys().hasAll(['date', 'type', 'author', 'text', 'color', 'x', 'y', 'z', 'rot', 'ownerId', 'createdAt', 'updatedAt'])
-        && d.keys().hasOnly(['date', 'type', 'author', 'text', 'color', 'x', 'y', 'z', 'rot', 'ownerId', 'createdAt', 'updatedAt', 'img', 'imgW', 'imgH', 'imgFull'])
+        && d.keys().hasOnly(['date', 'type', 'author', 'text', 'color', 'x', 'y', 'z', 'rot', 'ownerId', 'createdAt', 'updatedAt', 'img', 'imgType', 'imgW', 'imgH', 'imgFull'])
         && isDayKey(d.date)
         && d.type in ['guest', 'memo', 'photo']
         && d.author is string && d.author.size() >= 1 && d.author.size() <= 20 && d.author.matches('.*[^\\s].*')
@@ -111,10 +111,10 @@ service cloud.firestore {
 
       function validImageDoc() {
         let d = request.resource.data;
-        return d.keys().hasAll(['data', 'ownerId', 'date'])
-          && d.keys().hasOnly(['data', 'ownerId', 'date'])
+        return d.keys().hasAll(['data', 'type', 'ownerId', 'date'])
+          && d.keys().hasOnly(['data', 'type', 'ownerId', 'date'])
           && d.ownerId == request.auth.uid
-          && isImageData(d.data, 560000)
+          && isImage(d.data, d.type, 160000)
           && isToday(d.date)
           && existsAfter(/databases/$(database)/documents/notes/$(noteId))
           && noteAfter().ownerId == request.auth.uid

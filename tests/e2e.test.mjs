@@ -179,11 +179,11 @@ test('큰 사진은 올리기 전에 줄이고, 보드에는 작은 사진만 �
   await card.waitFor({ timeout: 10_000 });
   const thumb = await card.locator('img').getAttribute('src');
   assert.match(thumb, /^data:image\/(webp|jpeg);base64,/);
-  assert.ok(thumb.length <= Math.ceil((48 * 1024) / 3) * 4 + 30, `작은 사진 ${thumb.length}자`);
+  assert.ok(thumb.length <= Math.ceil((32 * 1024) / 3) * 4 + 30, `작은 사진 ${thumb.length}자`);
   await card.click();
   await bob.waitForFunction((len) => document.querySelector('#detailImg').src.length > len, thumb.length, { timeout: 10_000 });
   const full = await bob.$eval('#detailImg', (img) => img.src.length);
-  assert.ok(full <= Math.ceil((300 * 1024) / 3) * 4 + 30, `큰 사진 ${full}자`);
+  assert.ok(full <= Math.ceil((120 * 1024) / 3) * 4 + 30, `큰 사진 ${full}자`);
   await bob.keyboard.press('Escape');
 });
 
@@ -310,6 +310,42 @@ test('휴대폰에서도 로그인하고 글을 남길 수 있어요', async () 
   await phone.waitForSelector('.note >> text=폰에서 남겨요');
   await bob.waitForSelector('.note >> text=폰에서 남겨요', { timeout: 10_000 });
   await phone.context().close();
+});
+
+test('카카오톡·인스타그램 앱 안에서는 Google 로그인 대신 브라우저로 여는 방법을 보여 줘요', async () => {
+  const iphone = devices['iPhone 13'];
+  const android = devices['Pixel 7'];
+  const cases = [
+    { name: '카카오톡', device: { ...iphone, userAgent: `${iphone.userAgent} KAKAOTALK 10.8.5` }, open: '다른 브라우저로 열기' },
+    { name: '아이폰 인스타그램', device: { ...iphone, userAgent: `${iphone.userAgent} Instagram 350.0.0.0` }, open: 'Safari로 열기' },
+    { name: '안드로이드 인스타그램', device: { ...android, userAgent: `${android.userAgent} Instagram 350.0.0.0` }, open: null },
+  ];
+  for (const c of cases) {
+    const page = await visitor(c.device);
+    await page.tap('#writeBtn');
+    await page.waitForSelector('#signin[open]');
+    assert.equal(await page.isVisible('#inAppHint'), true, c.name);
+    assert.equal(await page.isVisible('#googleSignIn'), false, `${c.name}: 막히는 Google 버튼은 숨겨요`);
+    assert.equal(await page.isVisible('#copyLink'), true, c.name);
+    if (c.open) assert.equal(await page.textContent('#openExternal'), c.open);
+    else assert.equal(await page.isVisible('#openExternal'), false, c.name);
+    await page.context().close();
+  }
+  // 보통 브라우저에서는 Google 버튼만 보여요.
+  await guest.click('#writeBtn');
+  await guest.waitForSelector('#signin[open]');
+  assert.equal(await guest.isVisible('#inAppHint'), false);
+  assert.equal(await guest.isVisible('#googleSignIn'), true);
+  await guest.keyboard.press('Escape');
+});
+
+test('공유 미리보기 정보와 이미지가 있어요', async () => {
+  const og = await guest.$$eval('meta[property^="og:"]', (els) => Object.fromEntries(els.map((m) => [m.getAttribute('property'), m.content])));
+  assert.equal(og['og:title'], 'Guestnote 오늘의 방명록');
+  assert.match(og['og:image'], /^https:\/\/.+\/og\.jpg$/);
+  const res = await fetch(new URL('og.jpg', app.base));
+  assert.equal(res.status, 200);
+  assert.ok((await res.arrayBuffer()).byteLength > 10_000);
 });
 
 test('브라우저 오류가 없어요', () => {

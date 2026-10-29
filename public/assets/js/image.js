@@ -135,11 +135,11 @@ export async function compressImage(file, opts) {
     let base = { source: img.source, width, height };
     if (needsFull) {
       const r = await encodeWithin(img.source, width, height, opts.fullSide, opts.fullBytes, type);
-      full = { dataUrl: await blobToDataUrl(r.blob), bytes: r.blob.size, width: r.width, height: r.height, type: r.blob.type };
+      full = { blob: r.blob, dataUrl: await blobToDataUrl(r.blob), bytes: r.blob.size, width: r.width, height: r.height, type: r.blob.type };
       base = { source: r.canvas, width: r.width, height: r.height };
     }
     const t = await encodeWithin(base.source, base.width, base.height, opts.thumbSide, opts.thumbBytes, type);
-    const thumb = { dataUrl: await blobToDataUrl(t.blob), bytes: t.blob.size, width: t.width, height: t.height, type: t.blob.type };
+    const thumb = { blob: t.blob, dataUrl: await blobToDataUrl(t.blob), bytes: t.blob.size, width: t.width, height: t.height, type: t.blob.type };
 
     return {
       thumb,

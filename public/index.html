@@ -6,6 +6,17 @@
   <title>Guestnote 오늘의 방명록</title>
   <meta name="description" content="날마다 새로 열리는 유리 보드에 방명록과 메모, 사진을 남겨 보세요. 지난 날의 보드도 달력에서 다시 볼 수 있어요.">
   <meta name="theme-color" content="#dfe3ff">
+  <!-- 카카오톡·인스타그램 등에 링크를 공유할 때 보이는 미리보기 (이미지 주소는 전체 주소여야 해요) -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Guestnote">
+  <meta property="og:title" content="Guestnote 오늘의 방명록">
+  <meta property="og:description" content="날마다 새로 열리는 유리 보드에 한마디와 사진을 남겨 주세요.">
+  <meta property="og:url" content="https://meaterick.github.io/Guestnote/">
+  <meta property="og:image" content="https://meaterick.github.io/Guestnote/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:locale" content="ko_KR">
+  <meta name="twitter:card" content="summary_large_image">
   <!-- 사용자 글은 textContent로만 그려요. 아래 정책은 혹시 모를 스크립트 삽입을 한 번 더 막아 줘요.
        Firebase(구글 API, Google 로그인 창)와 개발용 에뮬레이터, 구글 글꼴만 허용해요. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://*.googleapis.com http://127.0.0.1:* http://localhost:*; frame-src https://*.firebaseapp.com https://*.web.app https://accounts.google.com http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'self'; form-action 'self'">
@@ -208,8 +219,12 @@
       <p class="signin__lead">글을 남기고 내 글을 옮기려면 Google 계정으로 로그인해 주세요. 보드는 로그인하지 않아도 볼 수 있어요.</p>
       <p class="signin__note">이메일과 프로필 사진은 보드에 나오지 않아요. 글에는 직접 적은 이름만 보여요.</p>
       <div class="signin__inapp" id="inAppHint" hidden>
-        <p>카카오톡이나 인스타그램처럼 앱 안에서 연 화면에서는 Google이 로그인을 막아요. 크롬이나 사파리로 열어 주세요.</p>
-        <button class="btn btn--small" id="openExternal" type="button" hidden>다른 브라우저로 열기</button>
+        <p id="inAppText"></p>
+        <div class="signin__inapp-actions">
+          <button class="btn btn--primary" id="openExternal" type="button" hidden>다른 브라우저로 열기</button>
+          <button class="btn" id="copyLink" type="button">주소 복사</button>
+        </div>
+        <p class="signin__inapp-tip" id="inAppTip"></p>
       </div>
       <p class="form-error" id="signinError" role="alert" hidden></p>
       <button class="google-btn" id="googleSignIn" type="button">

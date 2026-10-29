@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
 import {
   doc, setDoc, getDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, deleteField,
-  collection, query, where, getDocs, getCountFromServer, Timestamp, setLogLevel,
+  collection, query, where, getDocs, getCountFromServer, Timestamp, Bytes, setLogLevel,
 } from 'firebase/firestore';
 
 // 일부러 막히는 요청이 많아서 SDK 경고는 끄고 결과만 봐요.
@@ -16,9 +16,10 @@ const kstDay = (offset = 0) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asi
 const TODAY = kstDay();
 const YESTERDAY = kstDay(-1);
 const TOMORROW = kstDay(1);
-// 작은 사진처럼 생긴 데이터 URL
-const THUMB = `data:image/webp;base64,${'A'.repeat(4000)}`;
-const FULL = `data:image/jpeg;base64,${'B'.repeat(200000)}`;
+// 사진처럼 생긴 바이트
+const bytes = (n, fill = 1) => Bytes.fromUint8Array(new Uint8Array(n).fill(fill));
+const THUMB = bytes(4000);
+const FULL = bytes(100000, 2);
 
 let env;
 // Google로 로그인한 방문자. provider를 바꾸면 다른 로그인 방식도 흉내 낼 수 있어요.
@@ -112,13 +113,16 @@ test('잘못된 내용은 막아요', async () => {
   }
 });
 
-test('사진은 작은 WebP/JPEG 데이터만 받아요', async () => {
+test('사진은 작은 WebP/JPEG 바이트만 받아요', async () => {
   const db = as('alice');
-  const img = { img: THUMB, imgW: 640, imgH: 480, imgFull: false };
+  const img = { img: THUMB, imgType: 'image/webp', imgW: 640, imgH: 480, imgFull: false };
   await assertSucceeds(setDoc(doc(db, 'notes/ok'), note({ type: 'photo', text: '', ...img })));
-  await assertFails(setDoc(doc(db, 'notes/svg'), note({ ...img, img: 'data:image/svg+xml;base64,PHN2Zz4=' })));
-  await assertFails(setDoc(doc(db, 'notes/big'), note({ ...img, img: `data:image/webp;base64,${'A'.repeat(90000)}` })));
-  await assertFails(setDoc(doc(db, 'notes/nosize'), note({ img: THUMB })));
+  await assertSucceeds(setDoc(doc(db, 'notes/jpeg'), note({ ...img, imgType: 'image/jpeg', img: bytes(40000) })));
+  await assertFails(setDoc(doc(db, 'notes/svg'), note({ ...img, imgType: 'image/svg+xml' })));
+  await assertFails(setDoc(doc(db, 'notes/big'), note({ ...img, img: bytes(40001) })));
+  await assertFails(setDoc(doc(db, 'notes/text'), note({ ...img, img: 'data:image/webp;base64,AAAA' })));
+  await assertFails(setDoc(doc(db, 'notes/notype'), note({ img: THUMB, imgW: 10, imgH: 10, imgFull: false })));
+  await assertFails(setDoc(doc(db, 'notes/nosize'), note({ img: THUMB, imgType: 'image/webp' })));
   await assertFails(setDoc(doc(db, 'notes/orphan'), note({ imgW: 10, imgH: 10 })));
 });
 
@@ -157,42 +161,44 @@ test('내 글은 언제든 지울 수 있고, 남의 글은 못 지워요', asyn
 
 test('큰 사진은 같은 글과 함께 저장해야 해요', async () => {
   const db = as('alice');
-  const withImage = note({ type: 'photo', text: '', img: THUMB, imgW: 640, imgH: 480, imgFull: true });
+  const withImage = note({ type: 'photo', text: '', img: THUMB, imgType: 'image/webp', imgW: 640, imgH: 480, imgFull: true });
 
   const batch = writeBatch(db);
   batch.set(doc(db, 'notes/p1'), withImage);
-  batch.set(doc(db, 'images/p1'), { data: FULL, ownerId: 'alice', date: TODAY });
+  batch.set(doc(db, 'images/p1'), { data: FULL, type: 'image/jpeg', ownerId: 'alice', date: TODAY });
   await assertSucceeds(batch.commit());
 
   // 글 없이 사진만
-  await assertFails(setDoc(doc(db, 'images/lonely'), { data: FULL, ownerId: 'alice', date: TODAY }));
+  await assertFails(setDoc(doc(db, 'images/lonely'), { data: FULL, type: 'image/jpeg', ownerId: 'alice', date: TODAY }));
   // 남의 글에 사진 붙이기
-  await seed('notes/bobs', seeded({ ownerId: 'bob', imgFull: true, img: THUMB, imgW: 1, imgH: 1 }));
-  await assertFails(setDoc(doc(db, 'images/bobs'), { data: FULL, ownerId: 'alice', date: TODAY }));
+  await seed('notes/bobs', seeded({ ownerId: 'bob', imgFull: true, img: THUMB, imgType: 'image/webp', imgW: 1, imgH: 1 }));
+  await assertFails(setDoc(doc(db, 'images/bobs'), { data: FULL, type: 'image/jpeg', ownerId: 'alice', date: TODAY }));
   // 너무 큰 사진
   const big = writeBatch(db);
   big.set(doc(db, 'notes/p2'), withImage);
-  big.set(doc(db, 'images/p2'), { data: `data:image/jpeg;base64,${'C'.repeat(560000)}`, ownerId: 'alice', date: TODAY });
+  big.set(doc(db, 'images/p2'), { data: bytes(160001), type: 'image/jpeg', ownerId: 'alice', date: TODAY });
   await assertFails(big.commit());
   // 다른 사람은 사진을 못 바꾸거나 지워요
-  await assertFails(setDoc(doc(as('bob'), 'images/p1'), { data: FULL, ownerId: 'bob', date: TODAY }));
+  await assertFails(setDoc(doc(as('bob'), 'images/p1'), { data: FULL, type: 'image/jpeg', ownerId: 'bob', date: TODAY }));
   await assertFails(deleteDoc(doc(as('bob'), 'images/p1')));
 });
 
 test('사진을 빼거나 바꾸고, 글과 함께 지울 수 있어요', async () => {
   const db = as('alice');
   const batch = writeBatch(db);
-  batch.set(doc(db, 'notes/p1'), note({ img: THUMB, imgW: 640, imgH: 480, imgFull: true }));
-  batch.set(doc(db, 'images/p1'), { data: FULL, ownerId: 'alice', date: TODAY });
+  batch.set(doc(db, 'notes/p1'), note({ img: THUMB, imgType: 'image/webp', imgW: 640, imgH: 480, imgFull: true }));
+  batch.set(doc(db, 'images/p1'), { data: FULL, type: 'image/jpeg', ownerId: 'alice', date: TODAY });
   await batch.commit();
 
   const swap = writeBatch(db);
-  swap.update(doc(db, 'notes/p1'), { img: THUMB, imgW: 320, imgH: 240, imgFull: true, updatedAt: serverTimestamp() });
-  swap.set(doc(db, 'images/p1'), { data: FULL.replace('B', 'D'), ownerId: 'alice', date: TODAY });
+  swap.update(doc(db, 'notes/p1'), { img: bytes(3000, 7), imgType: 'image/jpeg', imgW: 320, imgH: 240, imgFull: true, updatedAt: serverTimestamp() });
+  swap.set(doc(db, 'images/p1'), { data: bytes(90000, 3), type: 'image/webp', ownerId: 'alice', date: TODAY });
   await assertSucceeds(swap.commit());
 
   const remove = writeBatch(db);
-  remove.update(doc(db, 'notes/p1'), { img: deleteField(), imgW: deleteField(), imgH: deleteField(), imgFull: deleteField(), updatedAt: serverTimestamp() });
+  remove.update(doc(db, 'notes/p1'), {
+    img: deleteField(), imgType: deleteField(), imgW: deleteField(), imgH: deleteField(), imgFull: deleteField(), updatedAt: serverTimestamp(),
+  });
   remove.delete(doc(db, 'images/p1'));
   await assertSucceeds(remove.commit());
 

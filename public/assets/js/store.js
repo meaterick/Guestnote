@@ -72,19 +72,48 @@ export async function createStore(config) {
   const noteRef = (id) => F.doc(db, 'notes', id);
   const imageRef = (id) => F.doc(db, 'images', id);
   const fullImages = new Map();
+  const thumbs = new Map(); // 글 id → { bytes, url }: 같은 사진을 매번 다시 바꾸지 않게 기억해요
+
+  // 사진은 base64 글자 대신 바이트로 저장해요. 같은 사진이 저장 공간을 25% 덜 차지해요.
+  // 화면에는 기존처럼 data URL로 바꿔서 넘겨요.
+  const IMAGE_TYPES = ['image/webp', 'image/jpeg'];
+  const toBytes = async (blob) => F.Bytes.fromUint8Array(new Uint8Array(await blob.arrayBuffer()));
+  const toDataUrl = (bytes, type) => (bytes instanceof F.Bytes && IMAGE_TYPES.includes(type)
+    ? `data:${type};base64,${bytes.toBase64()}`
+    : null);
+
+  function thumbUrl(id, bytes, type) {
+    const hit = thumbs.get(id);
+    if (hit && hit.type === type && hit.bytes.isEqual(bytes)) return hit.url;
+    const url = toDataUrl(bytes, type);
+    thumbs.set(id, { bytes, type, url });
+    return url;
+  }
 
   function toNote(snap) {
     const d = snap.data({ serverTimestamps: 'estimate' });
-    return {
+    const note = {
       ...d,
       id: snap.id,
       createdAt: d.createdAt?.toMillis?.() ?? Date.now(),
       updatedAt: d.updatedAt?.toMillis?.() ?? Date.now(),
     };
+    if (d.img) note.img = thumbUrl(snap.id, d.img, d.imgType);
+    return note;
   }
 
-  function imageFields(image) {
-    return { img: image.thumb.dataUrl, imgW: image.thumb.width, imgH: image.thumb.height, imgFull: !!image.full };
+  async function imageFields(image) {
+    return {
+      img: await toBytes(image.thumb.blob),
+      imgType: image.thumb.type,
+      imgW: image.thumb.width,
+      imgH: image.thumb.height,
+      imgFull: !!image.full,
+    };
+  }
+
+  async function fullImageDoc(image, date) {
+    return { data: await toBytes(image.full.blob), type: image.full.type, ownerId: session.user.uid, date };
   }
 
   return {
@@ -116,6 +145,7 @@ export async function createStore(config) {
     },
 
     subscribeDay(date, onNotes, onError) {
+      thumbs.clear();
       const q = F.query(notesCol, F.where('date', '==', date));
       return F.onSnapshot(q, (snap) => {
         onNotes(snap.docs.map(toNote).sort((a, b) => a.createdAt - b.createdAt));
@@ -130,11 +160,11 @@ export async function createStore(config) {
         ownerId: session.user.uid,
         createdAt: F.serverTimestamp(),
         updatedAt: F.serverTimestamp(),
-        ...(image ? imageFields(image) : {}),
+        ...(image ? await imageFields(image) : {}),
       };
       batch.set(ref, note);
       if (image?.full) {
-        batch.set(imageRef(ref.id), { data: image.full.dataUrl, ownerId: session.user.uid, date: data.date });
+        batch.set(imageRef(ref.id), await fullImageDoc(image, data.date));
         fullImages.set(ref.id, image.full.dataUrl);
       }
       await batch.commit();
@@ -147,13 +177,13 @@ export async function createStore(config) {
       const batch = F.writeBatch(db);
       const fields = { ...patch, updatedAt: F.serverTimestamp() };
       if (image === null) {
-        Object.assign(fields, { img: F.deleteField(), imgW: F.deleteField(), imgH: F.deleteField(), imgFull: F.deleteField() });
+        for (const k of ['img', 'imgType', 'imgW', 'imgH', 'imgFull']) fields[k] = F.deleteField();
       } else if (image) {
-        Object.assign(fields, imageFields(image));
+        Object.assign(fields, await imageFields(image));
       }
       batch.update(noteRef(id), fields);
       if (image?.full) {
-        batch.set(imageRef(id), { data: image.full.dataUrl, ownerId: session.user.uid, date: note.date });
+        batch.set(imageRef(id), await fullImageDoc(image, note.date));
       } else if (image !== undefined && note.imgFull) {
         batch.delete(imageRef(id));
       }
@@ -177,7 +207,7 @@ export async function createStore(config) {
     async getFullImage(id) {
       if (fullImages.has(id)) return fullImages.get(id);
       const snap = await F.getDoc(imageRef(id));
-      const data = snap.exists() ? snap.data().data : null;
+      const data = snap.exists() ? toDataUrl(snap.get('data'), snap.get('type')) : null;
       if (data) fullImages.set(id, data);
       return data;
     },

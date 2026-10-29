@@ -68,6 +68,6 @@ export function errorMessage(err, fallback = '잠시 후 다시 시도해 주세
   const code = err?.code || '';
   if (code === 'permission-denied') return '권한이 없어서 저장하지 못했어요. 날짜가 바뀌었다면 새로고침해 주세요.';
   if (code === 'unavailable' || code === 'deadline-exceeded') return '인터넷 연결이 불안정해요. 연결을 확인하고 다시 시도해 주세요.';
-  if (code === 'resource-exhausted') return '오늘 사용할 수 있는 저장 용량을 다 썼어요. 내일 다시 시도해 주세요.';
+  if (code === 'resource-exhausted') return '무료 사용 한도에 닿아서 지금은 저장할 수 없어요. 사이트 관리자에게 알려 주세요.';
   return err?.message && !code ? err.message : fallback;
 }
