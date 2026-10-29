@@ -41,6 +41,7 @@ GitHub Pages는 파일만 보여 주는 정적 호스팅이라 글을 저장할 
 
 1. [Firebase 콘솔](https://console.firebase.google.com)에서 **프로젝트 추가**를 눌러 새 프로젝트를 만들어요. (Google 애널리틱스는 꺼도 돼요.)
 2. **빌드 → Firestore Database → 데이터베이스 만들기**
+   - 버전을 고르라고 하면 **Standard**
    - 위치: `asia-northeast3 (서울)` 추천
    - 보안 규칙: **프로덕션 모드**
 3. Firestore의 **규칙** 탭에 [firebase/firestore.rules](firebase/firestore.rules) 내용을 통째로 붙여 넣고 **게시**해요.
