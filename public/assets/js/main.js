@@ -141,6 +141,7 @@ function renderDock() {
       : state.view === state.today ? 'today' : 'past';
   // 쓰는 동안에는 보드 가운데의 큰 안내 글씨를 감춰요.
   $('#boardMessage').classList.toggle('is-hushed', !!writer?.active);
+  $('#boardTip').hidden = state.view !== state.today || !!writer?.active;
 }
 
 // ---------- 권한 ----------

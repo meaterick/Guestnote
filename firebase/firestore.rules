@@ -26,6 +26,13 @@ service cloud.firestore {
       return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
+    // 화면과 같이 계정 이름의 앞뒤 공백을 빼고 20자까지만 표시해요.
+    function accountAuthor() {
+      let raw = request.auth.token.get('name', '');
+      let name = raw is string ? raw.trim() : '';
+      return name.size() == 0 ? '방문자' : (name.size() > 20 ? name[0:20] : name);
+    }
+
     function isDayKey(d) {
       return d is string && d.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}');
     }
@@ -88,6 +95,7 @@ service cloud.firestore {
 
       allow create: if signedIn()
         && validNote(request.resource.data)
+        && request.resource.data.author == accountAuthor()
         && request.resource.data.ownerId == request.auth.uid
         && isToday(request.resource.data.date)
         && request.resource.data.createdAt == request.time
@@ -97,7 +105,7 @@ service cloud.firestore {
         && isToday(resource.data.date)
         && validNote(request.resource.data)
         && request.resource.data.updatedAt == request.time
-        && unchanged(['date', 'ownerId', 'createdAt'])
+        && unchanged(['date', 'ownerId', 'createdAt', 'author'])
         && (mine() || (isAdmin() && onlyChanged(['x', 'y', 'z', 'updatedAt'])));
 
       allow delete: if signedIn()

@@ -24,7 +24,7 @@ const FULL = bytes(100000, 2);
 let env;
 // Google로 로그인한 방문자. provider를 바꾸면 다른 로그인 방식도 흉내 낼 수 있어요.
 const as = (uid, provider = 'google.com') => (uid
-  ? env.authenticatedContext(uid, { firebase: { sign_in_provider: provider } })
+  ? env.authenticatedContext(uid, { name: uid === 'alice' ? '앨리스' : uid, firebase: { sign_in_provider: provider } })
   : env.unauthenticatedContext()).firestore();
 
 function note(over = {}) {
@@ -79,6 +79,20 @@ test('Google이 아닌 방식(익명 등)으로 로그인하면 글을 남길 �
 
 test('다른 사람 이름(ownerId)으로는 남길 수 없어요', async () => {
   await assertFails(setDoc(doc(as('bob'), 'notes/n1'), note()));
+});
+
+test('작성자는 계정 이름만 사용하고, 저장한 이름은 본인도 바꿀 수 없어요', async () => {
+  const db = as('alice');
+  await assertFails(setDoc(doc(db, 'notes/forged'), note({ author: '다른 이름' })));
+  await seed('notes/legacy', seeded({ author: '이전에 적은 이름' }));
+  await assertSucceeds(updateDoc(doc(db, 'notes/legacy'), { text: '내용만 고쳐요', updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(db, 'notes/legacy'), { author: '앨리스', updatedAt: serverTimestamp() }));
+  for (const [i, name] of [undefined, '', '   ', '  앨리스  ', '가'.repeat(21), '😀'.repeat(21)].entries()) {
+    const ctx = env.authenticatedContext('alice', { ...(name === undefined ? {} : { name }), firebase: { sign_in_provider: 'google.com' } });
+    const author = (name?.trim() || '방문자').slice(0, 20);
+    await assertSucceeds(setDoc(doc(ctx.firestore(), `notes/name${i}`), note({ author })))
+      .catch((err) => { throw new Error(`계정 이름 사례 ${i}: ${JSON.stringify(name)}`, { cause: err }); });
+  }
 });
 
 test('어제나 내일 보드에는 남길 수 없어요', async () => {
