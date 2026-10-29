@@ -18,8 +18,10 @@
   <meta property="og:locale" content="ko_KR">
   <meta name="twitter:card" content="summary_large_image">
   <!-- 사용자 글은 textContent로만 그려요. 아래 정책은 혹시 모를 스크립트 삽입을 한 번 더 막아 줘요.
-       Firebase(구글 API, Google 로그인 창)와 개발용 에뮬레이터, 구글 글꼴만 허용해요. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://*.googleapis.com http://127.0.0.1:* http://localhost:*; frame-src https://*.firebaseapp.com https://*.web.app https://accounts.google.com http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'self'; form-action 'self'">
+       Firebase(구글 API, Google 로그인 창)와 개발용 에뮬레이터, 구글 글꼴만 허용해요.
+       Google 로그인 스크립트가 가끔 보내는 상태 확인 요청(apis.google.com → www.google.com)과
+       Firestore의 연결 확인 이미지(www.google.com/images/cleardot.gif)도 막히지 않게 열어 두었어요. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://www.google.com; connect-src 'self' https://*.googleapis.com https://apis.google.com https://www.google.com http://127.0.0.1:* http://localhost:*; frame-src https://*.firebaseapp.com https://*.web.app https://accounts.google.com http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'self'; form-action 'self'">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
