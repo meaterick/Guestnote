@@ -37,6 +37,30 @@ async function seed(page, notes) {
   }, notes);
 }
 
+// 옮긴 자리가 브라우저 저장소에 실제로 저장될 때까지 기다려요. (저장 전에 새로고침하면 사라져요)
+// page.waitForFunction은 비동기 조건을 기다려 주지 않아서 직접 확인해요.
+async function waitForStored(page, translate, timeout = 10_000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const stored = await page.evaluate(async (expected) => {
+      const db = await new Promise((res, rej) => {
+        const r = indexedDB.open('guestnote', 1);
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      });
+      const notes = await new Promise((res) => {
+        const q = db.transaction('notes').objectStore('notes').getAll();
+        q.onsuccess = () => res(q.result);
+      });
+      db.close();
+      return notes.some((n) => `${n.x}px ${n.y}px` === expected);
+    }, translate);
+    if (stored) return;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error(`옮긴 자리(${translate})가 저장되지 않았어요.`);
+}
+
 const other = (id, date, over = {}) => ({
   id, date, type: 'guest', author: '지우', text: `${date}의 글`, color: 'lilac',
   x: 1800, y: 1200, z: 1, rot: 0, ownerId: 'someone-else', createdAt: Date.parse(`${date}T12:00:00+09:00`), updatedAt: 0, ...over,
@@ -62,12 +86,13 @@ test('글을 남기고, 끌어서 옮긴 자리가 새로고침 뒤에도 그대
   const page = await open();
   await compose(page, { author: '민지', text: '처음 와 봤어요!', tint: 'sky' });
   await compose(page, { type: 'memo', author: '도윤', text: '점심 뭐 먹지', tint: 'lemon', at: { x: 300, y: 600 } });
-  assert.equal(await page.locator('.note').count(), 2);
+  await page.waitForFunction(() => document.querySelectorAll('.note').length === 2);
   assert.equal(await page.isHidden('#boardMessage'), true);
 
   const note = page.locator('.note--guest');
   await dragBy(page, note, 180, 120);
   const moved = await translateOf(note);
+  await waitForStored(page, moved);
   await page.reload();
   await ready(page);
   await page.waitForFunction(() => document.querySelectorAll('.note').length === 2);
@@ -88,10 +113,10 @@ test('키보드 화살표로 내 글을 옮길 수 있어요', async () => {
   await note.focus();
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('Shift+ArrowDown');
-  await page.waitForTimeout(700);
   const [x1, y1] = (await translateOf(note)).split(' ').map(parseFloat);
   assert.equal(x1 - x0, 16);
   assert.equal(y1 - y0, 64);
+  await waitForStored(page, `${x1}px ${y1}px`);
   await page.reload();
   await ready(page);
   await page.waitForSelector('.note');
