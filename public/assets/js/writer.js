@@ -3,18 +3,8 @@
 // 아래 도구 막대에서 모양(글자/메모장)과 색을 고르고, 사진을 넣은 뒤 '올리기'를 눌러요.
 // 사진은 버튼, 끌어 놓기, 붙여 넣기로 넣을 수 있고, 올리기 전에 브라우저에서 줄여요.
 import { $, h, toast, errorMessage } from './ui.js';
-import { STYLES, TINTS, LIMITS, photoRatio } from './notes.js';
+import { STYLES, TINTS, LIMITS, photoRatio, accountAuthor } from './notes.js';
 import { compressImage, formatBytes, isSafeImageUrl, ImageError } from './image.js';
-
-const NAME_KEY = 'guestnote:author';
-
-function remembered(key) {
-  try { return localStorage.getItem(key) ?? ''; } catch { return ''; }
-}
-
-function remember(key, value) {
-  try { localStorage.setItem(key, value); } catch { /* 저장 공간을 못 쓰는 브라우저 */ }
-}
 
 const randomTilt = () => Math.round((Math.random() * 5 - 2.5) * 10) / 10 || 0.5;
 const touchFirst = () => window.matchMedia('(pointer: coarse)').matches;
@@ -54,12 +44,9 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     unphoto.innerHTML = '<svg aria-hidden="true"><use href="#i-close"/></svg>';
     const fig = h('figure', { class: 'note__photo draft__photo', hidden: true },
       img, h('span', { class: 'draft__busy', text: '사진을 줄이는 중…' }), unphoto);
-    const name = h('input', {
-      class: 'note__sign draft__name', maxlength: String(LIMITS.author), placeholder: '이름',
-      'aria-label': '이름', autocomplete: 'nickname', enterkeyhint: 'send',
-    });
+    const name = h('span', { class: 'note__sign draft__name', 'aria-label': '작성자' });
     const el = h('div', { class: 'note is-draft', role: 'group', 'aria-label': '쓰는 중인 글' },
-      fig, grow, h('footer', { class: 'note__foot' }, h('span', { class: 'note__dash', text: '—', 'aria-hidden': 'true' }), name));
+      fig, grow, h('footer', { class: 'note__foot' }, name));
 
     text.addEventListener('input', () => {
       grow.dataset.value = text.value;
@@ -72,7 +59,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     // 한글처럼 글자를 조합하는 중에 누른 Enter는 그 글자를 마무리하는 키라서 올리지 않아요. (두 번 올라가거나 마지막 글자가 빠지지 않게)
     el.addEventListener('keydown', (e) => {
       if (e.isComposing || e.keyCode === 229) return;
-      if (e.key === 'Enter' && !e.shiftKey && (e.target === text || e.target === name)) {
+      if (e.key === 'Enter' && !e.shiftKey && e.target === text) {
         e.preventDefault();
         commit();
       } else if (e.key === 'Escape') {
@@ -203,7 +190,6 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     submitBtn.textContent = d.busy ? (edit ? '저장하는 중…' : '올리는 중…') : (edit ? '저장' : '올리기');
     d.el.classList.toggle('is-saving', d.busy);
     d.text.readOnly = d.busy;
-    d.name.readOnly = d.busy;
   }
 
   bar.addEventListener('change', (e) => {
@@ -235,7 +221,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
 
   // ---------- 시작, 올리기, 그만두기 ----------
   // at: 글상자를 열 보드 좌표 (없으면 화면 가운데 근처 빈자리)
-  // note: 고칠 내 글 / file: 처음부터 넣을 사진 / defaultAuthor: 처음 쓸 때 채울 이름(Google 계정 이름)
+  // note: 고칠 내 글 / file: 처음부터 넣을 사진 / defaultAuthor: Google 계정 이름
   function start({ at = null, note = null, file = null, defaultAuthor = '' } = {}) {
     if (d) {
       // 이미 쓰는 중이면 그 글상자를 누른 곳으로 옮기고 이어서 써요.
@@ -260,7 +246,8 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     setTint(note?.color ?? 'clear');
     d.text.value = note?.text ?? '';
     d.grow.dataset.value = d.text.value;
-    d.name.value = note ? note.author : (remembered(NAME_KEY) || defaultAuthor).trim().slice(0, LIMITS.author);
+    d.author = note ? note.author : accountAuthor(defaultAuthor);
+    d.name.textContent = d.author;
     if (note && isSafeImageUrl(note.img)) showPhoto(note.img, photoRatio(note));
     layer.append(d.el);
     if (note) {
@@ -300,15 +287,10 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
       return;
     }
     const text = d.text.value.replace(/\s+$/, '').slice(0, LIMITS.text);
-    const author = d.name.value.trim().slice(0, LIMITS.author);
+    const author = d.author;
     if (!text.trim() && !hasPhoto()) {
       toast('내용을 적거나 사진을 넣어 주세요.');
       focus();
-      return;
-    }
-    if (!author) {
-      toast('이름을 적어 주세요.');
-      d.name.focus({ preventScroll: true });
       return;
     }
     const { w, h: ht } = rect();
@@ -323,7 +305,6 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     draft.busy = true;
     sync();
     try {
-      remember(NAME_KEY, author);
       await onSubmit({ mode: draft.mode, note: draft.note, id: draft.id, data, image: draft.image, pos });
       if (d === draft) close();
     } catch (err) {

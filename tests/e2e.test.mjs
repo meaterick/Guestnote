@@ -102,6 +102,7 @@ after(async () => {
 });
 
 test('로그인하지 않아도 보드를 볼 수 있고, 글을 남기려면 Google 로그인을 안내해요', async () => {
+  assert.equal(await guest.isVisible('#boardTip .board-tip__mouse'), true);
   assert.match(await guest.textContent('#boardMessageTitle'), /오늘의 첫 글/);
   assert.equal(await guest.textContent('#accountBtn'), '로그인');
   assert.equal(await guest.isHidden('#adminChip'), true);
@@ -116,14 +117,17 @@ test('로그인하지 않아도 보드를 볼 수 있고, 글을 남기려면 Go
   await guest.keyboard.press('Escape');
 });
 
-test('Google로 로그인하면 창 없이 보드 위에 바로 글상자가 열리고 이름이 채워져요', async () => {
+test('Google로 로그인하면 보드 위에 글상자가 열리고 작성자는 계정 이름으로 고정돼요', async () => {
+  await alice.evaluate(() => localStorage.setItem('guestnote:author', '예전에 적은 별명'));
   await alice.click('#writeBtn');
   await alice.waitForSelector('#signin[open]');
   const [popup] = await Promise.all([alice.waitForEvent('popup'), alice.click('#googleSignIn')]);
   await finishGooglePopup(popup, '앨리스', 'alice@example.com');
   await alice.waitForSelector('.note.is-draft textarea', { timeout: 15_000 });
   assert.equal(await alice.evaluate(() => document.querySelector('dialog[open]')), null, '글쓰기 창은 따로 뜨지 않아요');
-  assert.equal(await alice.inputValue('.is-draft .draft__name'), '앨리스');
+  assert.equal(await alice.textContent('.is-draft .draft__name'), '앨리스');
+  assert.equal(await alice.locator('.is-draft input, .is-draft [contenteditable=true], .note__dash').count(), 0);
+  assert.equal(await alice.isHidden('#boardTip'), true);
   assert.equal(await alice.evaluate(() => document.activeElement?.classList.contains('draft__text')), true, '바로 쓸 수 있게 커서가 있어요');
   assert.equal(await alice.inputValue('#writeBar input[name=style]:checked'), 'text', '기본 모양은 글자만');
   assert.equal(await dockMode(alice), 'write');
@@ -131,6 +135,7 @@ test('Google로 로그인하면 창 없이 보드 위에 바로 글상자가 열
   await alice.keyboard.press('Escape');
   await alice.waitForSelector('.is-draft', { state: 'detached' });
   assert.equal(await dockMode(alice), 'today');
+  assert.equal(await alice.isVisible('#boardTip'), true);
 
   await signInWithGoogle(bob, '밥', 'bob@example.com');
   assert.notEqual(await uidOf(alice), await uidOf(bob));
@@ -147,6 +152,8 @@ test('빈 곳을 두 번 눌러 쓰면 그 자리에 붙고, 다른 사람 보�
   await guest.waitForSelector('.note >> text=실시간으로 보이나요?', { timeout: 10_000 });
   assert.equal(await alice.locator('.note.is-movable').count(), 1);
   assert.equal(await bob.locator('.note.is-movable').count(), 0, '남의 글은 옮길 수 없어요');
+  assert.equal(await mine.locator('.note__foot').textContent(), '앨리스');
+  assert.equal(await guest.isVisible('#boardTip'), true, '글이 있어도 안내가 보여요');
 });
 
 test('메모장 모양과 색을 골라서 쓸 수 있어요', async () => {
@@ -285,6 +292,10 @@ test('내 글은 두 번 눌러 그 자리에서 고치고, 골라서 지울 수
   assert.equal(await alice.inputValue('.is-draft textarea'), '오타가 있는 글');
   assert.equal(await alice.inputValue('#writeBar input[name=style]:checked'), 'memo');
   assert.equal(await alice.locator('.note.is-held').count(), 1, '고치는 동안 원래 글은 감춰요');
+  assert.equal(await alice.textContent('.is-draft .draft__name'), '앨리스');
+  assert.equal(await alice.locator('.is-draft input, .note__dash').count(), 0);
+  // 표시 문구를 직접 변조해도 저장할 작성자는 처음 값 그대로예요.
+  await alice.locator('.is-draft .draft__name').evaluate((el) => { el.textContent = '다른 이름'; });
   await alice.fill('.is-draft textarea', '고친 글');
   await alice.check('#writeBar input[name=style][value=text]', { force: true });
   await alice.click('#writeSubmit');
@@ -292,6 +303,7 @@ test('내 글은 두 번 눌러 그 자리에서 고치고, 골라서 지울 수
   const fixed = bob.locator('.note', { hasText: '고친 글' });
   await fixed.waitFor({ timeout: 10_000 });
   assert.equal(await fixed.evaluate((el) => el.classList.contains('note--text')), true);
+  assert.equal(await fixed.locator('.note__sign').textContent(), '앨리스');
 
   await alice.locator('.note', { hasText: '고친 글' }).click();
   assert.equal(await alice.isVisible('#pickMine'), true);
@@ -341,6 +353,7 @@ test('지난 날짜는 달력과 주소로 찾아가서 읽기만 할 수 있어
   assert.equal(await alice.evaluate(() => location.hash), `#/${yesterday}`);
   assert.equal(await alice.textContent('#dateBadge'), '지난 보드');
   assert.equal(await dockMode(alice), 'past');
+  assert.equal(await alice.isHidden('#boardTip'), true);
   assert.equal(await alice.isVisible('#writeBtn'), false);
   assert.equal(await alice.locator('.note.is-movable').count(), 0, '어제 쓴 내 글도 옮길 수 없어요');
 
@@ -425,9 +438,14 @@ test('자정이 지나면 새 보드가 열리고, 어제 글은 지난 보드�
 
 test('휴대폰에서도 로그인하고 보드에 바로 글을 쓸 수 있어요', async () => {
   const phone = await visitor({ ...devices['iPhone 13'] });
+  assert.equal(await phone.isVisible('#boardTip .board-tip__touch'), true);
+  assert.equal(await phone.isHidden('#boardTip .board-tip__mouse'), true);
+  const tip = await phone.locator('#boardTip').boundingBox();
+  assert.ok(tip.x >= 0 && tip.x + tip.width <= phone.viewportSize().width);
   await signInWithGoogle(phone, '모바일', 'phone@example.com');
   await phone.tap('#writeBtn');
   await phone.waitForSelector('.is-draft textarea');
+  assert.equal(await phone.textContent('.is-draft .draft__name'), '모바일');
   assert.equal(await phone.isVisible('#writeSubmit'), true);
   await phone.fill('.is-draft textarea', '폰에서 남겨요');
   await phone.tap('#writeSubmit');

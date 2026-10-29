@@ -71,13 +71,12 @@ export async function makePhoto(browser, width = 2400, height = 1600) {
 }
 
 // 보드에 바로 글을 써서 올려요. at(화면 좌표)을 주면 그 자리를 두 번 눌러 글상자를 열어요.
-export async function write(page, { at, text = '', style = 'text', tint = 'clear', author, photo } = {}) {
+export async function write(page, { at, text = '', style = 'text', tint = 'clear', photo } = {}) {
   if (at) await page.mouse.dblclick(at.x, at.y);
   else await page.click('#writeBtn');
   await page.waitForSelector('.is-draft textarea');
   await page.check(`#writeBar input[name=style][value=${style}]`, { force: true });
   await page.check(`#writeBar input[name=tint][value=${tint}]`, { force: true });
-  if (author !== undefined) await page.fill('.is-draft .draft__name', author);
   await page.fill('.is-draft textarea', text);
   if (photo) {
     await page.setInputFiles('#photoInput', { name: 'photo.png', mimeType: 'image/png', buffer: photo });

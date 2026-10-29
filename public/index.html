@@ -86,6 +86,11 @@
     </div>
   </main>
 
+  <p class="board-tip" id="boardTip" hidden>
+    <span class="board-tip__mouse">빈 곳을 더블클릭하면 바로 글을 쓸 수 있어요.</span>
+    <span class="board-tip__touch">빈 곳을 두 번 누르면 바로 글을 쓸 수 있어요.</span>
+  </p>
+
   <!-- 아래 막대: 오늘은 글쓰기 버튼, 지난 날은 안내, 글을 고르면 그 글의 정보, 쓰는 중에는 글쓰기 도구 -->
   <div class="dock" id="dock" data-mode="today">
     <button class="cta" id="writeBtn" type="button"><svg><use href="#i-pen"/></svg><span>글 남기기</span></button>
@@ -164,7 +169,7 @@
         <button class="icon-btn" type="button" data-close aria-label="닫기"><svg><use href="#i-close"/></svg></button>
       </header>
       <p class="signin__lead">글을 남기고 내 글을 옮기려면 Google 계정으로 로그인해 주세요. 보드는 로그인하지 않아도 볼 수 있어요.</p>
-      <p class="signin__note">이메일과 프로필 사진은 보드에 나오지 않아요. 글에는 직접 적은 이름만 보여요.</p>
+      <p class="signin__note">이메일과 프로필 사진은 보드에 나오지 않아요. 작성자는 Google 계정 이름으로 표시되며 여기서 바꿀 수 없어요.</p>
       <div class="signin__inapp" id="inAppHint" hidden>
         <p id="inAppText"></p>
         <div class="signin__inapp-actions">

@@ -6,6 +6,8 @@
 //   images/{id}  크게 보기용 사진 (글을 눌렀을 때만 불러와요)
 //   admins/{uid} 관리자 표시용 문서 (Firebase 콘솔에서 직접 만들어요)
 
+import { accountAuthor } from './notes.js';
+
 const SDK = 'https://www.gstatic.com/firebasejs/12.19.0';
 
 export async function createStore(config) {
@@ -162,6 +164,7 @@ export async function createStore(config) {
       const batch = F.writeBatch(db);
       const note = {
         ...data,
+        author: accountAuthor(session.user.name),
         ownerId: session.user.uid,
         createdAt: F.serverTimestamp(),
         updatedAt: F.serverTimestamp(),
@@ -180,7 +183,8 @@ export async function createStore(config) {
     async updateNote(note, patch, image) {
       const { id } = note;
       const batch = F.writeBatch(db);
-      const fields = { ...patch, updatedAt: F.serverTimestamp() };
+      const { author, ...editable } = patch;
+      const fields = { ...editable, updatedAt: F.serverTimestamp() };
       if (image === null) {
         for (const k of ['img', 'imgType', 'imgW', 'imgH', 'imgFull']) fields[k] = F.deleteField();
       } else if (image) {

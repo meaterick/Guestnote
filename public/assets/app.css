@@ -426,6 +426,25 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
 .board-message.is-hushed { opacity: 0; }
 .board-message[data-kind="loading"] .board-message__title { font-size: 64px; opacity: 0.45; }
 
+/* 확대하거나 보드를 옮겨도 화면 구석에 남는 작은 글쓰기 안내 */
+.board-tip {
+  position: fixed;
+  z-index: 20;
+  left: max(16px, env(safe-area-inset-left));
+  bottom: calc(var(--dock-h, 60px) + 28px + env(safe-area-inset-bottom));
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+.board-tip__touch { display: none; }
+@media (pointer: coarse) {
+  .board-tip__mouse { display: none; }
+  .board-tip__touch { display: inline; }
+}
+
 .notes { position: absolute; inset: 0; }
 
 /* ---------- 글 ---------- */
@@ -480,7 +499,6 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
   font-size: 25px;
   line-height: 1.1;
 }
-.note__dash { flex: none; opacity: 0.75; }
 .note__sign {
   min-width: 0;
   overflow: hidden;
@@ -597,24 +615,6 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
   caret-color: var(--accent);
 }
 .draft__text::placeholder { color: var(--ink-3); opacity: 1; }
-
-.draft__name {
-  width: 7em;
-  min-width: 3em;
-  max-width: 11em;
-  field-sizing: content;
-  margin: 0;
-  padding: 0 2px;
-  border: 0;
-  border-bottom: 1.5px dashed var(--line);
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  outline: none;
-}
-.draft__name:focus { border-bottom-color: var(--focus); }
-.draft__name::placeholder { color: var(--ink-3); opacity: 0.8; }
 
 .draft__unphoto {
   position: absolute;
