@@ -45,7 +45,8 @@ service cloud.firestore {
     }
 
     // 브라우저에서 줄인 사진만 받아요. (WebP 또는 JPEG 바이트)
-    // 상한: 보드용 작은 사진 40,000바이트, 크게 보기용 사진 160,000바이트 (public/config.js 의 예산보다 넉넉하게)
+    // 상한: 보드용 작은 사진 40,000바이트, 크게 보기용 사진 160,000바이트, 움직이는 GIF 320,000바이트
+    // (public/config.js 의 예산보다 넉넉하게)
     function isImage(data, type, maxBytes) {
       return data is bytes && data.size() > 0 && data.size() <= maxBytes
         && type in ['image/webp', 'image/jpeg'];
@@ -56,13 +57,14 @@ service cloud.firestore {
           isImage(d.img, d.imgType, 40000)
           && d.imgW is int && d.imgW > 0 && d.imgW <= 2048
           && d.imgH is int && d.imgH > 0 && d.imgH <= 2048
-          && d.imgFull is bool))
-        && ('img' in d || (!('imgType' in d) && !('imgW' in d) && !('imgH' in d) && !('imgFull' in d)));
+          && d.imgFull is bool
+          && (!('imgAnim' in d) || (d.imgAnim == true && d.imgFull == true))))
+        && ('img' in d || (!('imgType' in d) && !('imgW' in d) && !('imgH' in d) && !('imgFull' in d) && !('imgAnim' in d)));
     }
 
     function validNote(d) {
       return d.keys().hasAll(['date', 'type', 'author', 'text', 'color', 'x', 'y', 'z', 'rot', 'ownerId', 'createdAt', 'updatedAt'])
-        && d.keys().hasOnly(['date', 'type', 'author', 'text', 'color', 'x', 'y', 'z', 'rot', 'ownerId', 'createdAt', 'updatedAt', 'img', 'imgType', 'imgW', 'imgH', 'imgFull'])
+        && d.keys().hasOnly(['date', 'type', 'author', 'text', 'color', 'x', 'y', 'z', 'rot', 'ownerId', 'createdAt', 'updatedAt', 'img', 'imgType', 'imgW', 'imgH', 'imgFull', 'imgAnim'])
         && isDayKey(d.date)
         && d.type in ['text', 'memo']
         && d.author is string && d.author.size() >= 1 && d.author.size() <= 20 && d.author.matches('.*[^\\s].*')
@@ -119,12 +121,16 @@ service cloud.firestore {
         return getAfter(/databases/$(database)/documents/notes/$(noteId)).data;
       }
 
+      // 움직이는 GIF 글(imgAnim)에는 GIF만, 다른 글에는 WebP/JPEG만 받아요.
       function validImageDoc() {
         let d = request.resource.data;
+        let animated = noteAfter().get('imgAnim', false) == true;
         return d.keys().hasAll(['data', 'type', 'ownerId', 'date'])
           && d.keys().hasOnly(['data', 'type', 'ownerId', 'date'])
           && d.ownerId == request.auth.uid
-          && isImage(d.data, d.type, 160000)
+          && (animated
+            ? (d.type == 'image/gif' && d.data is bytes && d.data.size() > 0 && d.data.size() <= 320000)
+            : isImage(d.data, d.type, 160000))
           && isToday(d.date)
           && existsAfter(/databases/$(database)/documents/notes/$(noteId))
           && noteAfter().ownerId == request.auth.uid

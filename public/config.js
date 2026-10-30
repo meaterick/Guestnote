@@ -34,6 +34,10 @@ export default {
     thumbBytes: 32 * 1024,
     fullSide: 1200,
     fullBytes: 120 * 1024,
+    // 움직이는 GIF: 긴 변 320px, 300KB 이하로 줄여요. 이미 480px·300KB 이하면 그대로 올려요.
+    gifSide: 320,
+    gifBytes: 300 * 1024,
+    gifKeepSide: 480,
     maxInputBytes: 25 * 1024 * 1024,
   },
 };

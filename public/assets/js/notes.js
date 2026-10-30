@@ -29,11 +29,11 @@ export function photoRatio(note) {
   return Math.min(2, Math.max(0.62, r));
 }
 
-function content(note) {
+function content(note, photo) {
   const parts = [];
-  if (isSafeImageUrl(note.img)) {
+  if (isSafeImageUrl(photo)) {
     const fig = h('figure', { class: 'note__photo' },
-      h('img', { src: note.img, alt: '', decoding: 'async', draggable: 'false' }));
+      h('img', { src: photo, alt: '', decoding: 'async', draggable: 'false' }));
     fig.style.aspectRatio = String(photoRatio(note));
     parts.push(fig);
   }
@@ -45,13 +45,15 @@ function content(note) {
 
 const painted = new WeakMap();
 
+// ctx.photo(note): 움직이는 GIF를 다 불러왔으면 그 주소 (아직이면 작은 사진을 보여 줘요)
 export function paintNote(el, note, ctx) {
+  const photo = ctx.photo?.(note) || note.img;
   // 내용이 그대로면 다시 그리지 않아요. (사진이 깜빡이지 않게)
-  const sig = [note.author, note.text, note.img, note.imgW, note.imgH];
+  const sig = [note.author, note.text, photo, note.imgW, note.imgH];
   const prev = painted.get(el);
   if (!prev || prev.some((v, i) => v !== sig[i])) {
     painted.set(el, sig);
-    el.replaceChildren(...content(note));
+    el.replaceChildren(...content(note, photo));
   }
   // 옮기는 중 같은 다른 상태 표시는 건드리지 않게 하나씩 바꿔요.
   const style = STYLES[note.type] ? note.type : 'text';

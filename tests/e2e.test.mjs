@@ -6,8 +6,9 @@ import { devices } from 'playwright';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import {
-  launch, prepare, ready, write, pasteImage, dropImage, uidOf, dragBy, translateOf, makePhoto, collectErrors, kstDay,
+  launch, prepare, ready, write, pasteImage, dropImage, uidOf, dragBy, translateOf, makePhoto, makeGif, collectErrors, kstDay, emptySpot,
 } from './helpers.mjs';
+import { readGif } from '../public/assets/js/gif.js';
 
 const PROJECT = 'demo-guestnote';
 const config = {
@@ -216,9 +217,14 @@ test('남의 글은 끌어도 움직이지 않고, 고르면 쓴 사람만 보�
   assert.equal(await bob.isHidden('#pickEdit'), true);
   assert.equal(await bob.isHidden('#pickDelete'), true);
   assert.equal(await bob.isHidden('#pickMine'), true);
+  // 남의 글자 글 위를 두 번 누르면 그 글을 고치는 게 아니라, 그 자리에 내 새 글상자가 열려요.
   await theirs.dblclick();
-  assert.equal(await bob.locator('.is-draft').count(), 0, '남의 글은 두 번 눌러도 고칠 수 없어요');
+  await bob.waitForSelector('.is-draft textarea');
+  assert.equal(await bob.inputValue('.is-draft textarea'), '', '남의 글은 고칠 수 없어요');
+  assert.equal(await bob.locator('.note.is-held').count(), 0);
+  assert.equal(await bob.textContent('.is-draft .draft__name'), '밥');
   await bob.keyboard.press('Escape');
+  await bob.waitForSelector('.is-draft', { state: 'detached' });
   await bob.waitForSelector('#dock[data-mode="today"]');
 });
 
@@ -271,6 +277,44 @@ test('사진은 붙여 넣거나 끌어다 놓아도 줄여서 올라가요', as
   await bob.waitForFunction(() => document.querySelectorAll('.note.has-photo').length === 3, null, { timeout: 10_000 });
   const thumbs = await bob.$$eval('.note.has-photo img', (imgs) => imgs.map((i) => i.src.length));
   assert.ok(thumbs.every((n) => n <= Math.ceil((32 * 1024) / 3) * 4 + 30), `작은 사진들 ${thumbs}`);
+});
+
+test('움직이는 GIF는 줄여서 올리고, 보드에서도 움직여요', async () => {
+  const big = makeGif(640, 360, 20);
+  await alice.click('#writeBtn');
+  await alice.waitForSelector('.is-draft textarea');
+  await alice.setInputFiles('#photoInput', { name: 'ball.gif', mimeType: 'image/gif', buffer: big });
+  await alice.waitForSelector('.toast >> text=/움직이는 GIF를 .+ → .+로 줄였어요/', { timeout: 30_000 });
+  await alice.waitForSelector('.is-draft .draft__photo:not(.is-working) img[src^="data:image/gif"]');
+  await alice.fill('.is-draft textarea', '움직이는 공');
+  await alice.click('#writeSubmit');
+  await alice.waitForSelector('.is-draft', { state: 'detached', timeout: 15_000 });
+
+  // 다른 사람 보드에서도 첫 장면 다음에 움직이는 GIF로 바뀌어요.
+  const card = bob.locator('.note.has-photo', { hasText: '움직이는 공' });
+  await card.locator('img[src^="data:image/gif"]').waitFor({ timeout: 15_000 });
+  const src = await card.locator('img').getAttribute('src');
+  const bytes = Buffer.from(src.split(',')[1], 'base64');
+  assert.ok(bytes.length <= 300 * 1024, `GIF ${bytes.length}바이트`);
+  const gif = readGif(new Uint8Array(bytes));
+  assert.ok(gif.frames.length > 1, `장면 ${gif.frames.length}개`);
+  assert.ok(Math.max(gif.width, gif.height) <= 320, `${gif.width}×${gif.height}`);
+});
+
+test('작은 움직이는 GIF는 그대로 올려요', async () => {
+  const small = makeGif(120, 80, 6);
+  await alice.click('#writeBtn');
+  await alice.waitForSelector('.is-draft textarea');
+  await alice.setInputFiles('#photoInput', { name: 'small.gif', mimeType: 'image/gif', buffer: small });
+  await alice.waitForSelector('.toast >> text=움직이는 GIF를 그대로 올려요', { timeout: 30_000 });
+  await alice.waitForSelector('.is-draft .draft__photo:not(.is-working) img[src^="data:image/gif"]');
+  await alice.fill('.is-draft textarea', '작은 GIF');
+  await alice.click('#writeSubmit');
+  await alice.waitForSelector('.is-draft', { state: 'detached', timeout: 15_000 });
+  const img = bob.locator('.note.has-photo', { hasText: '작은 GIF' }).locator('img[src^="data:image/gif"]');
+  await img.waitFor({ timeout: 15_000 });
+  const src = await img.getAttribute('src');
+  assert.ok(Buffer.from(src.split(',')[1], 'base64').equals(small), '원래 파일 그대로예요');
 });
 
 test('사진 파일이 아니면 알려 주고, 빈 글은 올리지 않아요', async () => {
@@ -455,6 +499,25 @@ test('휴대폰에서도 로그인하고 보드에 바로 글을 쓸 수 있어�
   await phone.locator('.note', { hasText: '폰에서 남겨요' }).tap();
   await phone.waitForSelector('#dock[data-mode="pick"]');
   assert.equal(await phone.isVisible('#pickEdit'), true);
+  await phone.context().close();
+});
+
+test('휴대폰에서 빈 곳을 두 번 누르면 그 자리에 글상자가 열리고 바로 쓸 수 있어요', async () => {
+  const phone = await visitor({ ...devices['iPhone 13'] });
+  await signInWithGoogle(phone, '두번', 'double@example.com');
+  const spot = await emptySpot(phone);
+  assert.ok(spot, '빈 곳이 있어요');
+  await phone.touchscreen.tap(spot.x, spot.y);
+  await phone.touchscreen.tap(spot.x + 6, spot.y + 4);
+  await phone.waitForSelector('.is-draft textarea');
+  // 손가락을 떼는 순간 커서가 들어가서, 키보드가 바로 올라와요.
+  await phone.waitForFunction(() => document.activeElement?.classList.contains('draft__text'), null, { timeout: 2000 });
+  const box = await phone.locator('.is-draft').boundingBox();
+  assert.ok(Math.abs(box.x - spot.x) < 60 && Math.abs(box.y - spot.y) < 60, `누른 자리(${spot.x},${spot.y}) 그대로예요: ${box.x},${box.y}`);
+  await phone.keyboard.type('두 번 눌러 바로 써요');
+  await phone.keyboard.press('Enter');
+  await phone.waitForSelector('.is-draft', { state: 'detached', timeout: 15_000 });
+  await bob.waitForSelector('.note >> text=두 번 눌러 바로 써요', { timeout: 10_000 });
   await phone.context().close();
 });
 

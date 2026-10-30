@@ -212,6 +212,31 @@ test('큰 사진은 같은 글과 함께 저장해야 해요', async () => {
   await assertFails(deleteDoc(doc(as('bob'), 'images/p1')));
 });
 
+test('움직이는 GIF는 imgAnim 글의 큰 사진 자리에만, 320,000바이트까지 받아요', async () => {
+  const db = as('alice');
+  const anim = { img: THUMB, imgType: 'image/webp', imgW: 320, imgH: 180, imgFull: true, imgAnim: true };
+  const gifDoc = (n = 200000) => ({ data: bytes(n, 9), type: 'image/gif', ownerId: 'alice', date: TODAY });
+  const pair = (id, noteData, imageData) => {
+    const batch = writeBatch(db);
+    batch.set(doc(db, `notes/${id}`), note(noteData));
+    batch.set(doc(db, `images/${id}`), imageData);
+    return batch.commit();
+  };
+  await assertSucceeds(pair('g1', anim, gifDoc()));
+  await assertSucceeds(pair('g2', { ...anim, text: '' }, gifDoc(320000)));
+  await assertFails(pair('g3', anim, gifDoc(320001)));
+  // 움직이는 글에 GIF가 아닌 사진, 보통 글에 GIF는 안 돼요.
+  await assertFails(pair('g4', anim, { data: FULL, type: 'image/webp', ownerId: 'alice', date: TODAY }));
+  const { imgAnim: _, ...still } = anim;
+  await assertFails(pair('g5', still, gifDoc()));
+  // 작은 사진 자리에는 GIF를 못 넣어요.
+  await assertFails(pair('g6', { ...anim, imgType: 'image/gif' }, gifDoc()));
+  // imgAnim은 큰 사진이 있을 때 true로만 써요.
+  await assertFails(setDoc(doc(db, 'notes/g7'), note({ ...anim, imgFull: false })));
+  await assertFails(setDoc(doc(db, 'notes/g8'), note({ ...anim, imgAnim: false })));
+  await assertFails(setDoc(doc(db, 'notes/g9'), note({ imgAnim: true })));
+});
+
 test('사진을 빼거나 바꾸고, 글과 함께 지울 수 있어요', async () => {
   const db = as('alice');
   const batch = writeBatch(db);

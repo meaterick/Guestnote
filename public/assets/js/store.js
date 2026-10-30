@@ -78,7 +78,8 @@ export async function createStore(config) {
 
   // 사진은 base64 글자 대신 바이트로 저장해요. 같은 사진이 저장 공간을 25% 덜 차지해요.
   // 화면에는 기존처럼 data URL로 바꿔서 넘겨요.
-  const IMAGE_TYPES = ['image/webp', 'image/jpeg'];
+  // 작은 사진은 WebP/JPEG, 큰 사진 자리에는 움직이는 GIF도 와요.
+  const IMAGE_TYPES = ['image/webp', 'image/jpeg', 'image/gif'];
   const toBytes = async (blob) => F.Bytes.fromUint8Array(new Uint8Array(await blob.arrayBuffer()));
   const toDataUrl = (bytes, type) => (bytes instanceof F.Bytes && IMAGE_TYPES.includes(type)
     ? `data:${type};base64,${bytes.toBase64()}`
@@ -111,6 +112,8 @@ export async function createStore(config) {
       imgW: image.thumb.width,
       imgH: image.thumb.height,
       imgFull: !!image.full,
+      // 움직이는 GIF는 큰 사진 자리에 있어요. 보드가 이 표시를 보고 불러와서 움직여요.
+      ...(image.anim ? { imgAnim: true } : {}),
     };
   }
 
@@ -186,9 +189,10 @@ export async function createStore(config) {
       const { author, ...editable } = patch;
       const fields = { ...editable, updatedAt: F.serverTimestamp() };
       if (image === null) {
-        for (const k of ['img', 'imgType', 'imgW', 'imgH', 'imgFull']) fields[k] = F.deleteField();
+        for (const k of ['img', 'imgType', 'imgW', 'imgH', 'imgFull', 'imgAnim']) fields[k] = F.deleteField();
       } else if (image) {
         Object.assign(fields, await imageFields(image));
+        if (!image.anim) fields.imgAnim = F.deleteField();
       }
       batch.update(noteRef(id), fields);
       if (image?.full) {
@@ -213,8 +217,9 @@ export async function createStore(config) {
       fullImages.delete(note.id);
     },
 
-    async getFullImage(id) {
-      if (fullImages.has(id)) return fullImages.get(id);
+    // fresh: 사진이 바뀌었을 수 있어서 기억해 둔 것 말고 새로 불러와요.
+    async getFullImage(id, { fresh = false } = {}) {
+      if (!fresh && fullImages.has(id)) return fullImages.get(id);
       const snap = await F.getDoc(imageRef(id));
       const data = snap.exists() ? toDataUrl(snap.get('data'), snap.get('type')) : null;
       if (data) fullImages.set(id, data);

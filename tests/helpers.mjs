@@ -2,6 +2,7 @@
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';
 import { startServer } from './serve.mjs';
+import { buildPalette, indexFrame, diffFrames, writeGif } from '../public/assets/js/gif.js';
 
 const FIREBASE_DIR = fileURLToPath(new URL('../node_modules/firebase/', import.meta.url));
 
@@ -70,6 +71,36 @@ export async function makePhoto(browser, width = 2400, height = 1600) {
   return buffer;
 }
 
+// 그라데이션 위로 공이 움직이는 GIF를 만들어요. (사진처럼 잔잔한 무늬도 섞어요)
+export function makeGif(width, height, count) {
+  const frames = Array.from({ length: count }, (_, f) => {
+    const rgba = new Uint8ClampedArray(width * height * 4);
+    const cx = (width * (f + 1)) / (count + 1);
+    const cy = height / 2 + Math.sin(f / 2) * height * 0.25;
+    const r = Math.min(width, height) / 6;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const o = (y * width + x) * 4;
+        const ball = (x - cx) ** 2 + (y - cy) ** 2 < r * r;
+        const grain = ((x * 7919 + y * 104729) % 23) - 11;
+        rgba[o] = ball ? 250 : 40 + (x * 180) / width + grain;
+        rgba[o + 1] = ball ? 90 + f * 5 : 60 + (y * 150) / height + grain;
+        rgba[o + 2] = ball ? 70 : 200 - (x * 120) / width + grain;
+        rgba[o + 3] = 255;
+      }
+    }
+    return rgba;
+  });
+  const palette = buildPalette(frames);
+  let lut;
+  const indexed = frames.map((rgba) => {
+    const out = indexFrame(rgba, palette, 255, lut);
+    lut = out.lut;
+    return { indices: out.indices, delay: 8 };
+  });
+  return Buffer.from(writeGif({ width, height, palette, frames: diffFrames(indexed, width, height, 255) }));
+}
+
 // 보드에 바로 글을 써서 올려요. at(화면 좌표)을 주면 그 자리를 두 번 눌러 글상자를 열어요.
 export async function write(page, { at, text = '', style = 'text', tint = 'clear', photo } = {}) {
   if (at) await page.mouse.dblclick(at.x, at.y);
@@ -118,6 +149,23 @@ export function uidOf(page) {
       all.onsuccess = () => resolve(all.result.find((r) => r.fbase_key.startsWith('firebase:authUser:'))?.value?.uid ?? null);
     };
   }));
+}
+
+// 화면 위쪽 절반에서 글이 없는 빈 곳을 찾아요. (두 번 눌러 쓰기 테스트용)
+export function emptySpot(page) {
+  return page.evaluate(() => {
+    const top = document.querySelector('.topbar').getBoundingClientRect().bottom + 24;
+    const free = (x, y) => {
+      const el = document.elementFromPoint(x, y);
+      return !!el?.closest('#viewport') && !el.closest('.note');
+    };
+    for (let y = top; y < innerHeight * 0.45; y += 12) {
+      for (let x = 24; x < innerWidth - 140; x += 12) {
+        if (free(x, y) && free(x + 8, y + 6)) return { x, y };
+      }
+    }
+    return null;
+  });
 }
 
 export async function dragBy(page, locator, dx, dy) {

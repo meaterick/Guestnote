@@ -20,6 +20,9 @@ const config = {
     thumbBytes: 32 * 1024,
     fullSide: 1200,
     fullBytes: 120 * 1024,
+    gifSide: 320,
+    gifBytes: 300 * 1024,
+    gifKeepSide: 480,
     maxInputBytes: 25 * 1024 * 1024,
     ...userConfig.image,
   },
@@ -153,7 +156,34 @@ const perms = {
   canDelete: (n) => !!state.store?.canWrite && n.date === state.today && (state.store.isAdmin || perms.isMine(n)),
 };
 
-const boardCtx = () => ({ uid: state.store?.uid, canMove: perms.canMove });
+// ---------- 움직이는 GIF ----------
+// 보드에는 첫 장면(작은 사진)을 먼저 그리고, 큰 사진 자리의 GIF를 불러오면 바꿔 끼워요.
+// 작은 사진이 바뀌면(사진을 바꿔 고치면) 다시 불러와요.
+const motion = new Map(); // 글 id → { thumb, url }
+
+function photoOf(note) {
+  const m = motion.get(note.id);
+  return m && m.thumb === note.img ? m.url : null;
+}
+
+function loadMotion(notes) {
+  for (const n of notes) {
+    if (!n.imgAnim) continue;
+    const prev = motion.get(n.id);
+    if (prev && prev.thumb === n.img) continue;
+    const entry = { thumb: n.img, url: null };
+    motion.set(n.id, entry);
+    state.store.getFullImage(n.id, { fresh: !!prev }).then((url) => {
+      if (motion.get(n.id) !== entry || !isSafeImageUrl(url)) return;
+      entry.url = url;
+      board.setNotes(state.notes, boardCtx());
+    }).catch(() => {
+      if (motion.get(n.id) === entry) motion.delete(n.id);
+    });
+  }
+}
+
+const boardCtx = () => ({ uid: state.store?.uid, canMove: perms.canMove, photo: photoOf });
 
 // ---------- 날짜 이동 ----------
 function routeKey() {
@@ -189,6 +219,7 @@ function openDay(key) {
   state.unsub = null;
   state.view = key;
   state.notes = [];
+  motion.clear();
   applyLight(key);
   board.reset();
   renderHeader();
@@ -198,6 +229,7 @@ function openDay(key) {
     if (state.view !== key) return;
     state.notes = notes;
     board.setNotes(notes, boardCtx());
+    loadMotion(notes);
     selection?.sync(notes);
     if (key === state.today) calendar?.noteCountChanged(key, notes.length);
     setBoardMessage(notes.length ? null : 'empty');
@@ -298,25 +330,29 @@ const board = createBoard({
       if (!writer.active) selection?.select(note, { keyboard });
     },
     // 두 번 누르면: 고칠 수 있는 내 글은 바로 고치고, 사진은 크게 봐요.
-    onActivate(note) {
+    // 남의 글자 글은 테두리가 안 보여서 빈 곳처럼 보이니, 그 위를 두 번 눌러도 그 자리에 바로 써요.
+    onActivate(note, { touch = false, at = null } = {}) {
       if (writer.active) return;
       if (perms.canEdit(note)) {
         selection?.clear();
-        writer.start({ note });
+        writer.start({ note, deferFocus: touch, photo: photoOf(note) });
       } else if (isSafeImageUrl(note.img)) {
         selection?.openPhoto(note);
+      } else if (note.type === 'text' && at && state.view === state.today) {
+        selection?.clear();
+        startWriting({ at, deferFocus: touch });
       }
     },
     onEmptyTap() {
       selection?.clear();
       writer.dismissIfEmpty();
     },
-    onEmptyActivate(at) {
+    onEmptyActivate(at, { touch = false } = {}) {
       if (state.view !== state.today) {
         toast(PAST_ONLY_READ);
         return;
       }
-      startWriting({ at });
+      startWriting({ at, deferFocus: touch });
     },
     onMove: moveNote,
   },
@@ -417,15 +453,21 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) checkDay();
 });
 
+// 휴대폰에서 두 번 눌러 글상자를 열면, 손가락을 떼는 순간 커서를 둬요. 아이폰은 이때 둬야 키보드가 바로 올라와요.
+viewport.addEventListener('touchend', () => writer.focusPending(), { passive: true });
+viewport.addEventListener('click', () => writer.focusPending());
+
 // 휴대폰 키보드가 올라오면 아래 막대(글쓰기 도구)를 키보드 바로 위로 올리고, 글상자가 보이게 옮겨요.
+// 안드로이드는 키보드만큼 화면 자체가 줄어서(--kb는 0) 크기가 바뀔 때마다 글상자를 다시 확인해요.
 if (window.visualViewport) {
   const vv = window.visualViewport;
   let lastKb = 0;
   const syncKeyboard = () => {
     const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
-    if (kb === lastKb) return;
-    lastKb = kb;
-    root.style.setProperty('--kb', `${kb}px`);
+    if (kb !== lastKb) {
+      lastKb = kb;
+      root.style.setProperty('--kb', `${kb}px`);
+    }
     if (writer.active) requestAnimationFrame(() => writer.reveal());
   };
   vv.addEventListener('resize', syncKeyboard);
@@ -490,7 +532,8 @@ $('#googleSignIn').addEventListener('click', async (e) => {
     const next = pendingWrite;
     signin.close();
     toast(`${state.store.user?.name || '방문자'}님, 반가워요.`);
-    if (next) startWriting(next);
+    // 로그인 창을 거쳐 왔으니 손가락을 떼는 순간을 기다리지 않고 바로 커서를 둬요.
+    if (next) startWriting({ ...next, deferFocus: false });
   } catch (err) {
     // 사용자가 로그인 창을 닫은 경우에는 아무 말도 하지 않아요.
     const message = signInErrorMessage(err);
@@ -614,7 +657,7 @@ if (state.store) {
     timeZone: tz,
     permissions: perms,
     board,
-    onEdit: (note) => writer.start({ note }),
+    onEdit: (note) => writer.start({ note, photo: photoOf(note) }),
     onChange: renderDock,
   });
   calendar = createCalendar({

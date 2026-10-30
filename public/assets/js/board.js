@@ -8,6 +8,8 @@ const MIN_SCALE = 0.06;
 const MAX_SCALE = 2.4;
 const KEEP_VISIBLE = 120;
 const DOUBLE_TAP_MS = 380;
+// 두 번 누를 때 두 번째 손가락이 이만큼 안에 닿으면 같은 곳으로 봐요. (손가락은 마우스보다 덜 정확해요)
+const DOUBLE_TAP_REACH = { mouse: 30, touch: 44 };
 const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -15,9 +17,9 @@ const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)'
 // handlers
 //   insets()               화면 가장자리에서 머리말·아래 막대가 가리는 만큼
 //   onSelect(note, opts)   글을 한 번 눌렀을 때 (opts.keyboard: Enter로 골랐을 때)
-//   onActivate(note)       글을 두 번 눌렀을 때
+//   onActivate(note, opts) 글을 두 번 눌렀을 때 (opts.touch: 손가락으로 눌렀을 때, opts.at: 누른 보드 좌표)
 //   onEmptyTap(at)         빈 곳을 한 번 눌렀을 때 (at: 보드 좌표)
-//   onEmptyActivate(at)    빈 곳을 두 번 눌렀을 때
+//   onEmptyActivate(at, opts) 빈 곳을 두 번 눌렀을 때
 //   onMove(note, pos)      내 글을 옮겼을 때 (Promise, 실패하면 제자리로 돌아가요)
 export function createBoard({ viewport, world, layer, handlers }) {
   const view = { x: 0, y: 0, s: 1 };
@@ -31,6 +33,7 @@ export function createBoard({ viewport, world, layer, handlers }) {
   let gesture = null;
   let lastTap = null;
   let anim = 0;
+  let heading = null; // 움직이는 중이면 도착할 보기
   let edgeRaf = 0;
   let kbTimer = 0;
   let settled = false;
@@ -72,15 +75,20 @@ export function createBoard({ viewport, world, layer, handlers }) {
     world.style.transform = `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.s})`;
   }
 
-  function setView(target) {
+  function stopAnim() {
     cancelAnimationFrame(anim);
+    heading = null;
+  }
+
+  function setView(target) {
+    stopAnim();
     Object.assign(view, target);
     clampView();
     apply();
   }
 
   function animateTo(target, ms = 320) {
-    cancelAnimationFrame(anim);
+    stopAnim();
     const to = { ...view, ...target };
     // 목표 위치를 미리 범위 안으로 맞춰 둬요.
     const saved = { ...view };
@@ -91,6 +99,7 @@ export function createBoard({ viewport, world, layer, handlers }) {
     if (reducedMotion()) return setView(goal);
     const from = { ...view };
     const t0 = performance.now();
+    heading = goal;
     const step = (t) => {
       const k = Math.min(1, (t - t0) / ms);
       const e = 1 - (1 - k) ** 3;
@@ -99,6 +108,7 @@ export function createBoard({ viewport, world, layer, handlers }) {
       view.s = from.s + (goal.s - from.s) * e;
       apply();
       if (k < 1) anim = requestAnimationFrame(step);
+      else heading = null;
     };
     anim = requestAnimationFrame(step);
   }
@@ -157,9 +167,10 @@ export function createBoard({ viewport, world, layer, handlers }) {
     else setView(target);
   }
 
-  // 보기 t에서 rect가 보이는 곳 안에 들도록 t를 옮겨요. high면 위쪽 가장자리에 붙여요.
-  function shiftInto(t, rect, high = false) {
+  // 보기 t에서 rect가 보이는 곳 안에 들도록 t를 옮겨요. reserve만큼 화면 아래쪽(올라올 휴대폰 키보드 자리)은 비워 둬요.
+  function shiftInto(t, rect, reserve = 0) {
     const a = visibleArea();
+    if (reserve) a.height = Math.max(80, Math.min(a.height, viewport.clientHeight - reserve - a.top));
     const m = 24;
     const left = rect.x * t.s + t.x;
     const top = rect.y * t.s + t.y;
@@ -167,23 +178,24 @@ export function createBoard({ viewport, world, layer, handlers }) {
     const hh = rect.h * t.s;
     if (left < a.left + m) t.x += a.left + m - left;
     else if (left + w > a.left + a.width - m) t.x += Math.max(a.left + m - left, a.left + a.width - m - (left + w));
-    if (high || top < a.top + m) t.y += a.top + m - top;
+    if (top < a.top + m) t.y += a.top + m - top;
     else if (top + hh > a.top + a.height - m) t.y += Math.max(a.top + m - top, a.top + a.height - m - (top + hh));
     return t;
   }
 
-  // 화면 밖에 있는 글이 보이도록 보드를 옮겨요.
+  // 화면 밖에 있는 글이 보이도록 보드를 옮겨요. 움직이는 중이면 도착할 보기를 기준으로 맞춰서, 확대하던 것을 끊지 않아요.
   function reveal(rect) {
-    const t = shiftInto({ ...view }, rect);
-    if (t.x !== view.x || t.y !== view.y) animateTo(t);
+    const base = heading ?? view;
+    const t = shiftInto({ ...base }, rect);
+    if (t.x !== base.x || t.y !== base.y) animateTo(t);
   }
 
   // 글을 쓰기 좋게 보여 줘요: 너무 작게 보고 있으면 키우고(at 점은 화면에서 제자리), 글상자가 다 보이게 옮겨요.
-  // high: 휴대폰 키보드에 가리지 않게 글상자를 위쪽으로 올려요.
-  function focusOn(rect, { at = null, minScale: least = 0.9, high = false, animate = true } = {}) {
+  // reserve: 휴대폰 키보드가 덮을 아래쪽 높이. 글상자가 그 자리에 있을 때만 위로 올려요.
+  function focusOn(rect, { at = null, minScale: least = 0.9, reserve = 0, animate = true } = {}) {
     const s = Math.min(MAX_SCALE, Math.max(view.s, least));
     const p = at ?? { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
-    const t = shiftInto({ s, x: p.x * view.s + view.x - p.x * s, y: p.y * view.s + view.y - p.y * s }, rect, high);
+    const t = shiftInto({ s, x: p.x * view.s + view.x - p.x * s, y: p.y * view.s + view.y - p.y * s }, rect, reserve);
     if (animate) animateTo(t, 260);
     else setView(t);
   }
@@ -310,15 +322,16 @@ export function createBoard({ viewport, world, layer, handlers }) {
   function tap(e, item) {
     const now = performance.now();
     const id = item?.note.id ?? null;
+    const touch = e.pointerType !== 'mouse';
     const twice = !!lastTap && lastTap.id === id && now - lastTap.t < DOUBLE_TAP_MS
-      && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30;
+      && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < DOUBLE_TAP_REACH[touch ? 'touch' : 'mouse'];
     lastTap = twice ? null : { t: now, x: e.clientX, y: e.clientY, id };
+    const at = toWorld(e.clientX, e.clientY);
     if (item) {
-      if (twice) handlers.onActivate(item.note);
+      if (twice) handlers.onActivate(item.note, { touch, at });
       else handlers.onSelect(item.note, {});
     } else {
-      const at = toWorld(e.clientX, e.clientY);
-      if (twice) handlers.onEmptyActivate(at);
+      if (twice) handlers.onEmptyActivate(at, { touch });
       else handlers.onEmptyTap(at);
     }
   }
@@ -351,7 +364,7 @@ export function createBoard({ viewport, world, layer, handlers }) {
     if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
     // 쓰는 중인 글상자 안에서는 글자를 고르고 고칠 수 있게 보드가 끼어들지 않아요.
     if (e.target.closest?.('.is-draft')) return;
-    cancelAnimationFrame(anim);
+    stopAnim();
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { viewport.setPointerCapture(e.pointerId); } catch { /* 이미 끝난 포인터 */ }
     if (pointers.size === 2) return startPinch();
@@ -471,7 +484,7 @@ export function createBoard({ viewport, world, layer, handlers }) {
   // 휠: 그냥 굴리면 이동, Ctrl(또는 트랙패드 두 손가락 오므리기)과 함께면 확대/축소
   viewport.addEventListener('wheel', (e) => {
     e.preventDefault();
-    cancelAnimationFrame(anim);
+    stopAnim();
     if (e.ctrlKey || e.metaKey) {
       zoomAt(view.s * Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
       return;

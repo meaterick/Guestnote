@@ -1,8 +1,14 @@
 // 사진 줄이기. 올리기 전에 브라우저 안에서 크기와 화질을 낮춰서 용량 예산에 맞춰요.
 // 결과는 보드에 바로 보이는 작은 사진(thumb)과, 눌렀을 때만 불러오는 큰 사진(full) 두 가지예요.
+// 움직이는 GIF는 첫 장면을 작은 사진으로 쓰고, 줄인 GIF를 큰 사진 자리에 둬요. (보드에서 불러와 움직여요)
+import { isGif, readGif, gifFrames, buildPalette, indexFrame, diffFrames, writeGif } from './gif.js';
 
 const WEBP = 'image/webp';
 const JPEG = 'image/jpeg';
+const GIF = 'image/gif';
+// 움직이는 GIF: 장면은 많아야 100개(넘으면 건너뛰며 골라요), 줄여도 긴 변 120px까지만
+const GIF_MAX_FRAMES = 100;
+const GIF_MIN_SIDE = 120;
 // 한 번에 그릴 캔버스의 긴 변 상한. iOS Safari의 캔버스 면적 제한을 넘지 않게 해요.
 const SAFE_SIDE = 4096;
 
@@ -114,6 +120,103 @@ async function encodeWithin(source, sw, sh, side, budget, type) {
   throw new ImageError('사진을 충분히 줄이지 못했어요. 다른 사진을 골라 주세요.');
 }
 
+// 오래 걸리는 반복 중간중간에 화면이 멈추지 않게 숨을 돌려요.
+const breathe = () => new Promise((resolve) => { setTimeout(resolve, 0); });
+
+function resizeRgba(rgba, w, h, tw, th, src, dst) {
+  src.getContext('2d').putImageData(new ImageData(rgba, w, h), 0, 0);
+  const g = dst.getContext('2d', { willReadFrequently: true });
+  g.clearRect(0, 0, tw, th);
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(src, 0, 0, w, h, 0, 0, tw, th);
+  return g.getImageData(0, 0, tw, th).data;
+}
+
+// 장면을 step개마다 하나씩 골라요. 건너뛴 장면의 시간은 고른 장면에 더해서 전체 길이는 그대로예요.
+function pickEvery(frames, step) {
+  if (step <= 1) return frames;
+  const out = [];
+  frames.forEach((f, i) => {
+    if (i % step === 0) out.push({ rgba: f.rgba, delay: f.delay });
+    else out[out.length - 1].delay += f.delay;
+  });
+  return out;
+}
+
+async function encodeAnimated(frames, w, h) {
+  const palette = buildPalette(frames.map((f) => f.rgba));
+  const clearIndex = 255;
+  let lut;
+  let seeThrough = false;
+  const indexed = [];
+  for (const [i, f] of frames.entries()) {
+    const r = indexFrame(f.rgba, palette, clearIndex, lut);
+    lut = r.lut;
+    seeThrough ||= r.indices.includes(clearIndex);
+    indexed.push({ indices: r.indices, delay: f.delay });
+    if (i % 10 === 9) await breathe();
+  }
+  // 투명한 곳이 있으면 장면마다 화면을 비우고 새로 그려요. 없으면 바뀐 곳만 남겨서 용량을 크게 줄여요.
+  const out = seeThrough
+    ? indexed.map((f) => ({ x: 0, y: 0, w, h, indices: f.indices, delay: f.delay, disposal: 2, transparent: clearIndex }))
+    : diffFrames(indexed, w, h, clearIndex);
+  return writeGif({ width: w, height: h, palette, frames: out });
+}
+
+// 움직이는 GIF를 보드에 맞게 줄여요. 이미 작으면 그대로 두고, 아니면 크기와 장면 수를 줄여 새 GIF로 만들어요.
+// 장면이 하나뿐이면 null (보통 사진처럼 다뤄요)
+async function shrinkGif(bytes, opts) {
+  const gif = readGif(bytes);
+  const n = gif.frames.length;
+  const { width: w, height: h } = gif;
+  if (n < 2) return null;
+  if (!w || !h || w * h > 4_000_000 || w * h * n > 300_000_000) {
+    throw new ImageError('GIF가 너무 크거나 길어서 움직이게 올릴 수 없어요.');
+  }
+  if (bytes.length <= opts.gifBytes && Math.max(w, h) <= opts.gifKeepSide) {
+    return { bytes, width: w, height: h, frames: n, kept: true };
+  }
+
+  // 장면을 차례로 겹쳐 그린 화면을 가장 큰 크기로 줄여 둬요.
+  const [bw, bh] = fitWithin(w, h, opts.gifSide);
+  const every = Math.ceil(n / GIF_MAX_FRAMES);
+  const src = makeCanvas(w, h);
+  const dst = makeCanvas(bw, bh);
+  const base = [];
+  let i = 0;
+  for (const f of gifFrames(gif)) {
+    if (i % every === 0) base.push({ rgba: resizeRgba(f.rgba, w, h, bw, bh, src, dst), delay: f.delay });
+    else base[base.length - 1].delay += f.delay;
+    if (++i % 8 === 0) await breathe();
+  }
+
+  // 예산에 들 때까지: 장면이 아주 많으면 먼저 반으로 줄이고, 그다음 크기를 줄이고, 더 못 줄이면 장면을 더 건너뛰어요.
+  const small = makeCanvas(bw, bh);
+  let side = Math.max(bw, bh);
+  let step = 1;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const [cw, ch] = fitWithin(w, h, side);
+    let frames = base;
+    if (cw !== bw || ch !== bh) {
+      small.width = cw;
+      small.height = ch;
+      frames = [];
+      for (const f of base) frames.push({ rgba: resizeRgba(f.rgba, bw, bh, cw, ch, dst, small), delay: f.delay });
+      await breathe();
+    }
+    const picked = pickEvery(frames, step);
+    const out = await encodeAnimated(picked, cw, ch);
+    if (out.length <= opts.gifBytes) return { bytes: out, width: cw, height: ch, frames: picked.length, kept: false };
+    const ratio = opts.gifBytes / out.length;
+    const nextSide = Math.max(GIF_MIN_SIDE, Math.floor(side * Math.max(0.6, Math.sqrt(ratio) * 0.95)));
+    if (step === 1 && picked.length > 30 && ratio < 0.6) step = 2;
+    else if (nextSide < side) side = nextSide;
+    else if (picked.length > 6) step += 1;
+    else break;
+  }
+  throw new ImageError('움직이는 GIF를 충분히 줄이지 못했어요.');
+}
+
 export async function compressImage(file, opts) {
   if (!file || !/^image\//.test(file.type || '')) {
     throw new ImageError('사진 파일만 올릴 수 있어요.');
@@ -124,10 +227,34 @@ export async function compressImage(file, opts) {
   }
 
   const type = await encodeType();
+  let anim = null;
+  let animIssue = '';
+  if (file.type === GIF) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (isGif(bytes)) {
+      try {
+        anim = await shrinkGif(bytes, opts);
+      } catch (err) {
+        if (!(err instanceof ImageError)) console.warn(err);
+        animIssue = err instanceof ImageError ? err.message : '움직이는 GIF로 만들지 못했어요.';
+      }
+    }
+  }
   const img = await decode(file);
   try {
     const { width, height } = img;
     if (!width || !height) throw new ImageError('사진을 읽지 못했어요.');
+
+    if (anim) {
+      const t = await encodeWithin(img.source, width, height, opts.thumbSide, opts.thumbBytes, type);
+      const blob = new Blob([anim.bytes], { type: GIF });
+      return {
+        anim: true,
+        thumb: { blob: t.blob, dataUrl: await blobToDataUrl(t.blob), bytes: t.blob.size, width: t.width, height: t.height, type: t.blob.type },
+        full: { blob, dataUrl: await blobToDataUrl(blob), bytes: blob.size, width: anim.width, height: anim.height, type: GIF },
+        original: { bytes: file.size, width, height, frames: anim.frames, kept: anim.kept },
+      };
+    }
 
     // 원본이 보드용 크기보다 작으면 큰 사진은 따로 만들지 않아요.
     const needsFull = Math.max(width, height) > opts.thumbSide;
@@ -142,9 +269,10 @@ export async function compressImage(file, opts) {
     const thumb = { blob: t.blob, dataUrl: await blobToDataUrl(t.blob), bytes: t.blob.size, width: t.width, height: t.height, type: t.blob.type };
 
     return {
+      anim: false,
       thumb,
       full,
-      original: { bytes: file.size, width, height, animated: file.type === 'image/gif' },
+      original: { bytes: file.size, width, height, animIssue },
     };
   } finally {
     img.release();
@@ -157,5 +285,5 @@ export function formatBytes(bytes) {
 }
 
 export function isSafeImageUrl(url) {
-  return typeof url === 'string' && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/]+=*$/.test(url);
+  return typeof url === 'string' && /^data:image\/(webp|jpeg|png|gif);base64,[A-Za-z0-9+/]+=*$/.test(url);
 }

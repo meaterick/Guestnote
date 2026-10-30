@@ -10,10 +10,15 @@ const randomTilt = () => Math.round((Math.random() * 5 - 2.5) * 10) / 10 || 0.5;
 const touchFirst = () => window.matchMedia('(pointer: coarse)').matches;
 
 function describe(result) {
-  const from = formatBytes(result.original.bytes);
-  const to = formatBytes(result.thumb.bytes + (result.full?.bytes ?? 0));
-  const gif = result.original.animated ? ' 움직이는 GIF는 첫 장면만 남아요.' : '';
-  return `사진을 ${from} → ${to}로 줄였어요.${gif}`;
+  const { original: o, thumb, full } = result;
+  const total = formatBytes(thumb.bytes + (full?.bytes ?? 0));
+  if (result.anim) {
+    return o.kept
+      ? `움직이는 GIF를 그대로 올려요. (${total})`
+      : `움직이는 GIF를 ${formatBytes(o.bytes)} → ${total}로 줄였어요. (${full.width}×${full.height}, ${o.frames}장면)`;
+  }
+  const still = o.animIssue ? ` ${o.animIssue} 첫 장면만 올라가요.` : '';
+  return `사진을 ${formatBytes(o.bytes)} → ${total}로 줄였어요.${still}`;
 }
 
 // onSubmit({ mode, note, id, data, image, pos }) 저장이 끝나면 풀리는 Promise
@@ -90,13 +95,16 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
 
   function reveal({ at = null, start = false } = {}) {
     if (!d) return;
-    // 휴대폰에서는 키보드가 올라와도 가리지 않게 위쪽으로 올리고, 바로 커서를 둘 수 있게 움직임 없이 옮겨요.
-    const high = start && touchFirst();
-    board.focusOn(rect(), { at, high, animate: start && !high, minScale: start ? 0.9 : 0 });
+    if (!start) return board.reveal(rect());
+    // 처음 열 때는 누른 자리에 그대로 두고, 휴대폰이면 곧 올라올 키보드(와 도구 막대)에 가릴 때만 그만큼 올려요.
+    const reserve = touchFirst() ? Math.round(window.innerHeight * 0.5) : 0;
+    board.focusOn(rect(), { at, reserve, minScale: 0.9 });
   }
 
   function focus() {
     if (!d || d.busy) return;
+    clearTimeout(d.focusTimer);
+    d.focusTimer = 0;
     d.text.focus({ preventScroll: true });
   }
 
@@ -145,7 +153,8 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
       const result = await compressImage(file, imageOptions);
       if (d !== draft || ticket !== draft.working) return;
       draft.image = result;
-      showPhoto(result.thumb.dataUrl, photoRatio({ imgW: result.thumb.width, imgH: result.thumb.height }));
+      // 움직이는 GIF는 글상자에서도 움직이는 모습으로 보여 줘요.
+      showPhoto(result.anim ? result.full.dataUrl : result.thumb.dataUrl, photoRatio({ imgW: result.thumb.width, imgH: result.thumb.height }));
       // 자리를 직접 고르지 않은 글상자는 사진만큼 커진 크기로 빈자리를 다시 찾아요. (다른 글을 덮지 않게)
       if (draft.auto) {
         const p = spotFor(null);
@@ -222,7 +231,9 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
   // ---------- 시작, 올리기, 그만두기 ----------
   // at: 글상자를 열 보드 좌표 (없으면 화면 가운데 근처 빈자리)
   // note: 고칠 내 글 / file: 처음부터 넣을 사진 / defaultAuthor: Google 계정 이름
-  function start({ at = null, note = null, file = null, defaultAuthor = '' } = {}) {
+  // deferFocus: 손가락으로 두 번 눌러 열 때. 커서는 손가락을 떼는 순간(focusPending)에 둬요.
+  // photo: 고칠 글의 사진으로 보여 줄 주소 (움직이는 GIF를 불러왔으면 그 주소)
+  function start({ at = null, note = null, file = null, defaultAuthor = '', deferFocus = false, photo = null } = {}) {
     if (d) {
       // 이미 쓰는 중이면 그 글상자를 누른 곳으로 옮기고 이어서 써요.
       if (at && !d.busy) {
@@ -248,7 +259,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     d.grow.dataset.value = d.text.value;
     d.author = note ? note.author : accountAuthor(defaultAuthor);
     d.name.textContent = d.author;
-    if (note && isSafeImageUrl(note.img)) showPhoto(note.img, photoRatio(note));
+    if (note && isSafeImageUrl(note.img)) showPhoto(isSafeImageUrl(photo) ? photo : note.img, photoRatio(note));
     layer.append(d.el);
     if (note) {
       board.hold(note.id);
@@ -260,9 +271,11 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     sync();
     onChange();
     reveal({ at, start: true });
-    focus();
     const end = d.text.value.length;
     d.text.setSelectionRange(end, end);
+    // 아이폰은 손가락을 떼는 그 순간에 커서를 둬야만 키보드가 올라와요. 그 순간이 안 오면 조금 뒤에 둬요.
+    if (deferFocus) d.focusTimer = setTimeout(focus, 600);
+    else focus();
     if (file) attach(file);
   }
 
@@ -330,6 +343,10 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     },
     // 키보드가 올라오거나 화면 크기가 바뀌면 글상자가 보이게 옮겨요.
     reveal: () => reveal(),
+    // 손가락을 뗀 순간: 두 번 눌러 연 글상자에 아직 커서를 안 뒀으면 지금 둬요.
+    focusPending() {
+      if (d?.focusTimer) focus();
+    },
     get active() {
       return !!d;
     },
