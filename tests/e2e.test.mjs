@@ -391,6 +391,8 @@ test('지난 날짜는 달력과 주소로 찾아가서 읽기만 할 수 있어
   await alice.click('#dateBtn');
   await alice.waitForSelector('#calendar[open]');
   await alice.waitForSelector('.cal__day.is-today:not([data-level="0"])', { timeout: 10_000 });
+  // 매달 1일에는 어제가 지난달이라 달력을 한 달 앞으로 넘겨요.
+  if (yesterday.slice(0, 7) !== kstDay().slice(0, 7)) await alice.click('#calPrev');
   await alice.waitForSelector(`.cal__day[data-key="${yesterday}"][data-level="1"]`, { timeout: 10_000 });
   await alice.click(`.cal__day[data-key="${yesterday}"]`);
   await alice.waitForFunction(() => document.querySelectorAll('.note').length === 2);
@@ -412,14 +414,18 @@ test('지난 날짜는 달력과 주소로 찾아가서 읽기만 할 수 있어
   assert.equal(await alice.isHidden('#pickDelete'), true);
   await alice.keyboard.press('Escape');
 
-  // 관리자도 지난 보드는 읽기만 해요.
+  // 관리자는 지난 글을 옮기거나 고칠 수는 없지만 지울 수는 있어요.
   await bob.goto(`${app.base}#/${yesterday}`);
   await ready(bob);
   await bob.waitForFunction(() => document.querySelectorAll('.note').length === 2);
   assert.equal(await bob.locator('.note.is-movable').count(), 0);
-  await bob.locator('.note').first().click();
+  await bob.locator('.note', { hasText: '지우' }).click();
   await bob.waitForSelector('#dock[data-mode="pick"]');
-  assert.equal(await bob.isHidden('#pickDelete'), true);
+  assert.equal(await bob.isHidden('#pickEdit'), true);
+  assert.equal(await bob.textContent('#pickDelete'), '관리자로 지우기');
+  await bob.click('#pickDelete');
+  await bob.click('#pickYes');
+  await alice.waitForFunction(() => document.querySelectorAll('.note').length === 1, null, { timeout: 10_000 });
   await bob.goto(app.base);
   await ready(bob);
 

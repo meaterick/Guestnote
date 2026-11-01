@@ -171,15 +171,18 @@ test('관리자는 오늘 보드의 남의 글을 옮기거나 지울 수 있지
   await assertSucceeds(deleteDoc(doc(db, 'notes/today2')));
 });
 
-test('지난 보드는 관리자도 읽기만 할 수 있어요', async () => {
+test('지난 글은 아무도 옮기거나 고칠 수 없고, 관리자만 지울 수 있어요', async () => {
   await seed('admins/root', {});
   await seed('notes/past', seeded({ date: YESTERDAY }));
   for (const uid of ['root', 'alice']) {
     const db = as(uid);
     await assertSucceeds(getDoc(doc(db, 'notes/past')));
     await assertFails(updateDoc(doc(db, 'notes/past'), { x: 1, y: 2, z: 3, updatedAt: serverTimestamp() }));
-    await assertFails(deleteDoc(doc(db, 'notes/past')));
+    await assertFails(updateDoc(doc(db, 'notes/past'), { text: '지난 글 고치기', updatedAt: serverTimestamp() }));
   }
+  await assertFails(deleteDoc(doc(as('alice'), 'notes/past')), '쓴 사람도 지난 글은 못 지워요');
+  await assertFails(deleteDoc(doc(as('bob'), 'notes/past')));
+  await assertSucceeds(deleteDoc(doc(as('root'), 'notes/past')));
 });
 
 test('내 글은 오늘 지울 수 있고, 남의 글은 못 지워요', async () => {
@@ -262,11 +265,16 @@ test('사진을 빼거나 바꾸고, 글과 함께 지울 수 있어요', async 
   await assertSucceeds(gone.commit());
 });
 
-test('지난 날의 큰 사진은 아무도 지울 수 없어요', async () => {
+test('지난 날의 사진 글은 관리자가 큰 사진과 함께 지울 수 있어요', async () => {
   await seed('admins/root', {});
+  await seed('notes/old', seeded({ date: YESTERDAY, img: THUMB, imgType: 'image/webp', imgW: 10, imgH: 10, imgFull: true }));
   await seed('images/old', { data: FULL, type: 'image/jpeg', ownerId: 'alice', date: YESTERDAY });
   await assertFails(deleteDoc(doc(as('alice'), 'images/old')));
-  await assertFails(deleteDoc(doc(as('root'), 'images/old')));
+  const db = as('root');
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'notes/old'));
+  batch.delete(doc(db, 'images/old'));
+  await assertSucceeds(batch.commit());
 });
 
 test('관리자 목록은 자기 것만 확인할 수 있고 아무도 못 써요', async () => {

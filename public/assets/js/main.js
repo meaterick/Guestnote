@@ -148,12 +148,12 @@ function renderDock() {
 }
 
 // ---------- 권한 ----------
-// 지난 보드는 관리자도 읽기만 해요. (firestore.rules 와 같아요)
+// 지난 보드는 읽기만 해요. 관리자만 지난 글을 지울 수 있어요. (firestore.rules 와 같아요)
 const perms = {
   isMine: (n) => !!state.store?.uid && n.ownerId === state.store.uid,
   canMove: (n) => !!state.store?.canWrite && n.date === state.today && (state.store.isAdmin || perms.isMine(n)),
   canEdit: (n) => !!state.store?.canWrite && n.date === state.today && perms.isMine(n),
-  canDelete: (n) => !!state.store?.canWrite && n.date === state.today && (state.store.isAdmin || perms.isMine(n)),
+  canDelete: (n) => !!state.store?.canWrite && (state.store.isAdmin || (perms.isMine(n) && n.date === state.today)),
 };
 
 // ---------- 움직이는 GIF ----------
