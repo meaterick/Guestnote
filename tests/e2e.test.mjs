@@ -15,7 +15,8 @@ const config = {
   firebase: { apiKey: 'demo-key', authDomain: `${PROJECT}.firebaseapp.com`, projectId: PROJECT, appId: 'demo-app' },
   emulator: { host: '127.0.0.1', firestorePort: 8080, authPort: 9099 },
   // 테스트에서는 지금 보는 사람 수를 빨리 새로 세요.
-  presence: { every: 1500, window: 4000 },
+  // 들어오고 나가는 건 실시간이라 짧은 주기가 필요 없어요. (주기보다 빨리 반영되는지 확인해요)
+  presence: { every: 30_000, window: 40_000 },
 };
 
 let app;
@@ -622,7 +623,7 @@ test('헤더에 지금 보는 사람 수가 나오고, 창을 닫으면 줄어�
   const extra = await visitor();
   await guest.waitForFunction((n) => Number(document.querySelector('#liveCount').textContent) >= n + 1, before, { timeout: 10_000 });
   await extra.close({ runBeforeUnload: true });
-  await guest.waitForFunction((n) => Number(document.querySelector('#liveCount').textContent) <= n, before, { timeout: 10_000 });
+  await guest.waitForFunction((n) => Number(document.querySelector('#liveCount').textContent) <= n, before, { timeout: 10_000 }).catch(async (e) => { throw new Error(`before=${before} now=${await count(guest)} ${e.message}`); });
   assert.match(await guest.getAttribute('#liveChip', 'aria-label'), /지금 \d+명이 보고 있어요/);
 });
 
@@ -630,26 +631,48 @@ test('지금 보는 사람을 누르면 로그인한 사람은 이름, 나머지
   const carol = await visitor();
   await signInWithGoogle(carol, '캐럴', 'carol@example.com');
   await guest.waitForSelector('#liveChip:not([hidden])');
-  const names = (page) => page.$$eval('#viewerList .viewer', (els) => els.map((el) => [...el.querySelectorAll('.viewer__name, .viewer__me')].map((x) => x.textContent).join(' ')));
+  const names = (page) => page.$$eval('#viewerList .who', (els) => els.map((el) => [...el.querySelectorAll('.who__name, .who__me')].map((x) => x.textContent).join(' ')));
+  const listed = (page, name) => page.evaluate((n) => [...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === n), name);
   await guest.click('#liveChip');
   await guest.waitForSelector('#viewers[open]');
-  await guest.waitForFunction(() => [...document.querySelectorAll('#viewerList .viewer__name')].some((el) => el.textContent === '캐럴'), null, { timeout: 10_000 });
+  // 열어 둔 목록에 바로 나타나요. (다시 남기는 주기 30초보다 훨씬 빨리)
+  await guest.waitForFunction(() => [...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === '캐럴'), null, { timeout: 5_000 });
   const seen = await names(guest);
   const anon = seen.find((t) => t.startsWith('익명'));
   assert.ok(anon, `익명 줄이 있어요: ${JSON.stringify(seen)}`);
   assert.match(anon, /나/, '로그인 안 한 나는 익명에 들어가요');
-  assert.match(await guest.textContent('#viewersStatus'), /^\d+명이 보고 있어요$/);
+  assert.equal(Number(await guest.textContent('#viewersCount')), Number(await guest.textContent('#liveCount')));
+  assert.equal(await guest.textContent('#viewersStatus'), '명이 함께 보고 있어요');
+  // 열어 둔 채로 캐럴이 나가면 바로 빠져요.
+  const leaving = await visitor();
+  await signInWithGoogle(leaving, '데이브', 'dave@example.com');
+  await guest.waitForFunction(() => [...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === '데이브'), null, { timeout: 5_000 });
+  await leaving.close({ runBeforeUnload: true });
+  await guest.waitForFunction(() => ![...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === '데이브'), null, { timeout: 5_000 });
+  assert.equal(await listed(guest, '캐럴'), true);
   await guest.keyboard.press('Escape');
   // 로그인한 사람에게는 자기 이름 옆에 '나'가 붙어요.
   await carol.click('#liveChip');
   await carol.waitForSelector('#viewers[open]');
-  await carol.waitForFunction(() => document.querySelector('#viewerList .viewer'));
+  await carol.waitForFunction(() => document.querySelector('#viewerList .who'));
   assert.equal((await names(carol))[0], '캐럴 나');
-  // 창을 닫으면 목록에서 빠져요.
-  await carol.context().close();
+  // 다른 탭으로 가면 바로 빠지고, 돌아오면 다시 나타나요.
+  await carol.keyboard.press('Escape');
   await guest.click('#liveChip');
-  await guest.waitForFunction(() => ![...document.querySelectorAll('#viewerList .viewer__name')].some((el) => el.textContent === '캐럴'), null, { timeout: 10_000 });
+  await guest.waitForFunction(() => document.querySelector('#viewerList .who'));
+  await carol.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await guest.waitForFunction(() => ![...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === '캐럴'), null, { timeout: 5_000 });
+  await carol.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await guest.waitForFunction(() => [...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === '캐럴'), null, { timeout: 5_000 });
   await guest.keyboard.press('Escape');
+  await carol.close({ runBeforeUnload: true });
+  await carol.context().close();
 });
 
 test('공유 미리보기 정보와 이미지가 있어요', async () => {

@@ -254,9 +254,11 @@ export async function createStore(config) {
 
     // 지금 보는 사람 수: 화면을 보고 있는 동안 every마다 '여기 있어요'를 남기고,
     // 최근 window 안에 남긴 브라우저 수를 세요. (세기는 1번 읽기로 끝나서 사람이 많아도 싸요)
-    // 지금 보는 사람: 1분마다 "보고 있음"을 남기고 최근 window 안에 남긴 사람 수를 알려 줘요.
-    // 로그인했으면 이름도 남겨서 누가 보는지 보여 줄 수 있어요. (익명 방문자는 시각만 남겨요)
-    watchPresence(onCount, { every = 60_000, window: recent = 90_000 } = {}) {
+    // 지금 보는 사람: 실시간으로 구독해서 들어오고 나가는 순간 바로 알려 줘요.
+    // - 화면을 보면 presence/{브라우저 id}에 서버 시각(+ 로그인했으면 uid와 이름)을 남겨요.
+    // - 다른 앱/탭으로 가거나 창을 닫으면 바로 지워요. (그래서 나갈 때도 곧바로 반영돼요)
+    // - 지우지 못하고 꺼진 경우(강제 종료 등)를 위해 every마다 다시 남기고, window 안에 남긴 기록만 세요.
+    watchPresence(onChange, { every = 300_000, window: recent = 390_000 } = {}) {
       const KEY = 'guestnote:visitor';
       let id = '';
       try { id = localStorage.getItem(KEY) || ''; } catch { /* 저장 공간을 못 쓰는 브라우저 */ }
@@ -266,71 +268,117 @@ export async function createStore(config) {
       }
       const ref = F.doc(db, 'presence', id);
       const col = F.collection(db, 'presence');
-      const recentQuery = () => F.query(col, F.where('seen', '>', F.Timestamp.fromMillis(Date.now() - recent)));
-      const mark = () => (session.user
-        ? { seen: F.serverTimestamp(), uid: session.user.uid, name: accountAuthor(session.user.nickname || session.user.name) }
-        : { seen: F.serverTimestamp() });
-      let timer = 0;
-      const tick = async () => {
-        clearTimeout(timer);
-        if (document.hidden) return;
-        timer = setTimeout(tick, every);
-        try {
-          try {
-            await F.setDoc(ref, mark());
-          } catch (err) {
-            // 이름을 남기는 규칙이 아직 게시되지 않았으면 익명으로라도 세요.
-            if (err?.code !== 'permission-denied' || !session.user) throw err;
-            await F.setDoc(ref, { seen: F.serverTimestamp() });
+      const myName = () => accountAuthor(session.user.nickname || session.user.name);
+      let docs = [];
+      let skew = 0; // 서버 시각 - 내 기기 시각 (기기 시계가 틀려도 바르게 세려고요)
+      let wroteAt = 0;
+      let unsub = null;
+      let beat = 0;
+      let sweep = 0;
+
+      const emit = () => {
+        const cutoff = Date.now() + skew - recent;
+        const named = new Map();
+        let anonymous = 0;
+        // 나는 언제나 목록에 있어요. (내 기록이 아직 반영 전이어도요)
+        if (session.user) named.set(session.user.uid, { uid: session.user.uid, name: myName(), me: true });
+        else anonymous += 1;
+        for (const d of docs) {
+          if (d.id === id || d.seen < cutoff) continue;
+          if (d.uid && d.name) {
+            if (!named.has(d.uid)) named.set(d.uid, { uid: d.uid, name: d.name, me: false });
+          } else {
+            anonymous += 1;
           }
-          const snap = await F.getCountFromServer(recentQuery());
-          onCount(Math.max(1, snap.data().count));
-        } catch {
-          // 세지 못하면 표시를 숨겨요. (무료 한도를 넘었거나 연결이 끊긴 경우)
-          onCount(null);
+        }
+        const people = [...named.values()].sort((a, b) => (b.me - a.me) || a.name.localeCompare(b.name, 'ko'));
+        onChange({ people, anonymous, total: people.length + anonymous });
+      };
+
+      const write = async () => {
+        clearTimeout(beat);
+        if (document.hidden) return;
+        beat = setTimeout(write, every);
+        const mark = session.user
+          ? { seen: F.serverTimestamp(), uid: session.user.uid, name: myName() }
+          : { seen: F.serverTimestamp() };
+        wroteAt = Date.now();
+        try {
+          await F.setDoc(ref, mark);
+        } catch (err) {
+          // 이름을 남기는 규칙이 아직 게시되지 않았으면 익명으로라도 남겨요.
+          if (err?.code === 'permission-denied' && session.user) await F.setDoc(ref, { seen: F.serverTimestamp() }).catch(() => {});
         }
       };
-      // 로그인/로그아웃하거나 닉네임을 바꾸면 바로 다시 남겨요.
-      let last = session.user ? `${session.user.uid}:${session.user.nickname}:${session.user.name}` : '';
-      const onAuth = () => {
-        const now = session.user ? `${session.user.uid}:${session.user.nickname}:${session.user.name}` : '';
-        if (now !== last) { last = now; tick(); }
+
+      const listen = () => {
+        if (unsub) return;
+        const since = F.Timestamp.fromMillis(Date.now() + skew - recent);
+        unsub = F.onSnapshot(F.query(col, F.where('seen', '>', since)), (snap) => {
+          docs = snap.docs.map((d) => ({
+            id: d.id,
+            seen: d.get('seen', { serverTimestamps: 'estimate' })?.toMillis?.() ?? Date.now(),
+            uid: typeof d.get('uid') === 'string' ? d.get('uid') : '',
+            name: typeof d.get('name') === 'string' ? d.get('name') : '',
+          }));
+          const mine = snap.docs.find((d) => d.id === id && !d.metadata.hasPendingWrites);
+          if (mine && wroteAt) {
+            skew = mine.get('seen').toMillis() - wroteAt;
+            wroteAt = 0;
+          }
+          emit();
+        }, () => {
+          // 구독하지 못하면 표시를 숨겨요. (무료 한도를 넘었거나 규칙이 막은 경우)
+          unsub = null;
+          onChange(null);
+        });
       };
-      const onVisible = () => { if (!document.hidden) tick(); };
-      // 창을 닫으면 바로 빠지도록 지워 봐요. (못 지워도 window가 지나면 세지 않아요)
-      const onLeave = () => { F.deleteDoc(ref).catch(() => {}); };
+
+      const start = () => {
+        write();
+        listen();
+        clearInterval(sweep);
+        sweep = setInterval(emit, Math.min(15_000, recent / 4)); // 오래된 기록을 걸러 내요. (읽기 없음)
+      };
+      // 창을 닫는 순간에는 SDK 요청이 다 나가기 전에 페이지가 꺼질 수 있어서,
+      // 페이지가 꺼져도 끝까지 보내지는 keepalive 요청으로 한 번 더 지워요. (규칙상 누구나 지울 수 있어요)
+      const base = config.emulator
+        ? `http://${config.emulator.host}:${config.emulator.firestorePort}`
+        : 'https://firestore.googleapis.com';
+      const leaveUrl = `${base}/v1/projects/${config.firebase.projectId}/databases/(default)/documents/presence/${id}?key=${encodeURIComponent(config.firebase.apiKey)}`;
+      const pause = () => {
+        clearTimeout(beat);
+        clearInterval(sweep);
+        try { fetch(leaveUrl, { method: 'DELETE', keepalive: true, mode: 'cors' }).catch(() => {}); } catch { /* keepalive를 못 쓰는 브라우저 */ }
+        F.deleteDoc(ref).catch(() => {});
+        unsub?.();
+        unsub = null;
+      };
+
+      // 로그인/로그아웃하거나 닉네임을 바꾸면 바로 다시 남겨요.
+      const who = () => (session.user ? `${session.user.uid}:${session.user.nickname}:${session.user.name}` : '');
+      let last = who();
+      const onAuth = () => {
+        if (who() === last) return;
+        last = who();
+        emit();
+        if (!document.hidden) write();
+      };
+      const onVisible = () => (document.hidden ? pause() : start());
+      // 뒤로 가기로 돌아온 페이지(bfcache)는 다시 시작해요.
+      const onShow = (e) => { if (e.persisted && !document.hidden) start(); };
       listeners.add(onAuth);
       document.addEventListener('visibilitychange', onVisible);
-      window.addEventListener('pagehide', onLeave);
-      tick();
+      window.addEventListener('pagehide', pause);
+      window.addEventListener('pageshow', onShow);
+      if (!document.hidden) start();
       return {
-        // 누가 보는지: 로그인한 사람은 이름(같은 계정은 한 번만), 나머지는 익명 수.
-        // 목록을 열 때만 불러서 읽기 횟수를 아껴요.
-        async list() {
-          const snap = await F.getDocs(recentQuery());
-          const named = new Map();
-          let anonymous = 0;
-          // 내 기록은 반영 전일 수 있어서 지금 상태로 직접 넣어요.
-          if (session.user) named.set(session.user.uid, { uid: session.user.uid, name: accountAuthor(session.user.nickname || session.user.name), me: true });
-          else anonymous += 1;
-          for (const d of snap.docs) {
-            if (d.id === id) continue;
-            const uid = d.get('uid');
-            const name = d.get('name');
-            if (typeof uid === 'string' && typeof name === 'string' && name) {
-              if (!named.has(uid)) named.set(uid, { uid, name, me: false });
-            } else {
-              anonymous += 1;
-            }
-          }
-          const people = [...named.values()].sort((a, b) => (b.me - a.me) || a.name.localeCompare(b.name, 'ko'));
-          return { people, anonymous, total: people.length + anonymous };
-        },
         stop() {
-          clearTimeout(timer);
+          pause();
           listeners.delete(onAuth);
           document.removeEventListener('visibilitychange', onVisible);
-          window.removeEventListener('pagehide', onLeave);
+          window.removeEventListener('pagehide', pause);
+          window.removeEventListener('pageshow', onShow);
         },
       };
     },

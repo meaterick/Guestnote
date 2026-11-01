@@ -643,59 +643,80 @@ const profile = setupDialog($('#profile'));
 // ---------- 지금 보는 사람 ----------
 const viewers = setupDialog($('#viewers'));
 
-function showLiveCount(n) {
-  $('#liveCount').textContent = String(n);
-  $('#liveChip').setAttribute('aria-label', `지금 ${n}명이 보고 있어요. 누가 보는지 보기`);
+// 이름마다 늘 같은 빛깔이 나오게 해요.
+function hueOf(text) {
+  let h = 2166136261;
+  for (const ch of text) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
+  return (h >>> 0) % 360;
 }
 
-let viewerTicket = 0;
-async function renderViewers() {
-  const my = ++viewerTicket;
-  const list = $('#viewerList');
-  const status = $('#viewersStatus');
-  if (!list.childElementCount) status.textContent = '불러오는 중…';
-  let who;
-  try {
-    who = await state.presence.list();
-  } catch {
-    if (my === viewerTicket) status.textContent = '지금은 불러오지 못했어요. 잠시 뒤에 다시 열어 주세요.';
+function whoRow({ name, sub = '', tag = '', anon = false, hue = 0 }) {
+  const li = document.createElement('li');
+  li.className = anon ? 'who who--anon' : 'who';
+  const avatar = document.createElement('span');
+  avatar.className = 'who__avatar';
+  avatar.setAttribute('aria-hidden', 'true');
+  if (anon) avatar.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="4"/><path d="M4.5 20c.8-4 3.8-6 7.5-6s6.7 2 7.5 6"/></svg>';
+  else {
+    avatar.textContent = Array.from(name)[0] || '?';
+    avatar.style.setProperty('--hue', String(hue));
+  }
+  const text = document.createElement('span');
+  text.className = 'who__text';
+  const label = document.createElement('span');
+  label.className = 'who__name';
+  label.textContent = name;
+  text.append(label);
+  if (sub) {
+    const small = document.createElement('span');
+    small.className = 'who__sub';
+    small.textContent = sub;
+    text.append(small);
+  }
+  li.append(avatar, text);
+  if (tag) {
+    const pill = document.createElement('span');
+    pill.className = 'who__me';
+    pill.textContent = tag;
+    li.append(pill);
+  }
+  return li;
+}
+
+function renderViewers() {
+  const who = state.presence;
+  if (!who) {
+    $('#viewersStatus').textContent = '지금은 불러오지 못했어요';
+    $('#viewerList').replaceChildren();
     return;
   }
-  if (my !== viewerTicket) return;
-  status.textContent = `${who.total}명이 보고 있어요`;
-  showLiveCount(who.total);
-  const row = (name, { me = '', anon = false } = {}) => {
-    const li = document.createElement('li');
-    li.className = anon ? 'viewer viewer--anon' : 'viewer';
-    const avatar = document.createElement('span');
-    avatar.className = 'viewer__avatar';
-    avatar.setAttribute('aria-hidden', 'true');
-    avatar.textContent = anon ? '?' : Array.from(name)[0];
-    const label = document.createElement('span');
-    label.className = 'viewer__name';
-    label.textContent = name;
-    li.append(avatar, label);
-    if (me) {
-      const tag = document.createElement('span');
-      tag.className = 'viewer__me';
-      tag.textContent = me;
-      li.append(tag);
-    }
-    return li;
-  };
-  const rows = who.people.map((p) => row(p.name, { me: p.me ? '나' : '' }));
+  $('#viewersCount').textContent = String(who.total);
+  $('#viewersStatus').textContent = '명이 함께 보고 있어요';
+  const rows = who.people.map((p) => whoRow({ name: p.name, tag: p.me ? '나' : '', hue: hueOf(p.uid) }));
   if (who.anonymous) {
-    const mine = state.store.user ? '' : (who.anonymous === 1 ? '나' : '나 포함');
-    rows.push(row(who.anonymous === 1 ? '익명' : `익명 ${who.anonymous}명`, { anon: true, me: mine }));
+    rows.push(whoRow({
+      name: who.anonymous === 1 ? '익명' : `익명 ${who.anonymous}명`,
+      sub: '로그인하지 않은 방문자',
+      tag: state.store.user ? '' : (who.anonymous === 1 ? '나' : '나 포함'),
+      anon: true,
+    }));
   }
-  list.replaceChildren(...rows);
+  $('#viewerList').replaceChildren(...rows);
+}
+
+function onPresence(who) {
+  state.presence = who;
+  $('#liveChip').hidden = who === null;
+  if (who) {
+    $('#liveCount').textContent = String(who.total);
+    $('#liveChip').setAttribute('aria-label', `지금 ${who.total}명이 보고 있어요. 누가 보는지 보기`);
+  }
+  if (viewers.isOpen) renderViewers();
 }
 
 $('#liveChip').addEventListener('click', () => {
-  if (!state.presence) return;
-  $('#viewerList').replaceChildren();
-  viewers.open();
   renderViewers();
+  viewers.open();
 });
 
 $('#accountBtn').addEventListener('click', () => {
@@ -796,11 +817,7 @@ if (state.store) {
   $('#adminChip').hidden = !state.store.isAdmin;
   renderAccount();
   state.store.onAuthChange(onAuthChanged);
-  state.presence = state.store.watchPresence((n) => {
-    $('#liveChip').hidden = n === null;
-    if (n !== null) showLiveCount(n);
-    if (n !== null && viewers.isOpen) renderViewers();
-  }, config.presence);
+  state.store.watchPresence(onPresence, config.presence);
   const start = routeKey();
   if (location.hash && start === state.today) history.replaceState(null, '', location.pathname + location.search);
   state.view = null;
