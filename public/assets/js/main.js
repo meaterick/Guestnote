@@ -285,7 +285,7 @@ function startWriting(opts = {}) {
   }
   if (state.view !== state.today) goTo(state.today);
   selection.clear();
-  writer.start({ ...opts, defaultAuthor: state.store.user?.name ?? '' });
+  writer.start({ ...opts, defaultAuthor: state.store.author });
 }
 
 async function submitNote({ mode, note, id, data, image, pos }) {
@@ -575,15 +575,15 @@ $('#copyLink').addEventListener('click', async (e) => {
   setTimeout(() => { btn.textContent = '주소 복사'; }, 2500);
 });
 
-// ---------- 프로필: 화면 설정과 로그아웃 ----------
+// ---------- 프로필: 닉네임, 화면 설정, 로그아웃 ----------
 function renderAccount() {
   const btn = $('#accountBtn');
   const user = state.store?.user;
   btn.classList.toggle('is-signed-in', !!user);
   if (user) {
-    const label = user.name || user.email || '내 계정';
+    const label = state.store.author || user.email || '내 계정';
     btn.textContent = [...label.trim()][0]?.toUpperCase() ?? '나';
-    btn.setAttribute('aria-label', `${label} 계정, 화면 설정과 로그아웃`);
+    btn.setAttribute('aria-label', `${label} 계정, 닉네임·화면 설정과 로그아웃`);
     btn.title = label;
   } else {
     btn.textContent = '로그인';
@@ -602,7 +602,30 @@ $('#accountBtn').addEventListener('click', () => {
   }
   const theme = pref(PREF_THEME) ?? 'auto';
   for (const r of document.querySelectorAll('input[name="theme"]')) r.checked = r.value === theme;
+  $('#nickInput').value = state.store.user.nickname;
+  $('#nickInput').placeholder = state.store.user.name || '방문자';
   profile.open();
+});
+
+$('#nickForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const input = $('#nickInput');
+  const name = input.value.trim();
+  if (name === state.store.user.nickname) {
+    profile.close();
+    return;
+  }
+  const btn = $('#nickSave');
+  btn.disabled = true;
+  try {
+    await state.store.setNickname(name);
+    profile.close();
+    toast(name ? `이제 '${name}'(으)로 글을 남겨요.` : 'Google 계정 이름으로 글을 남겨요.');
+  } catch (err) {
+    toast(errorMessage(err, '닉네임을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.'), { tone: 'error' });
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 $('#signOutBtn').addEventListener('click', async () => {

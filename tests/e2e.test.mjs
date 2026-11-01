@@ -445,12 +445,38 @@ test('지난 날짜는 달력과 주소로 찾아가서 읽기만 할 수 있어
   assert.equal(await alice.textContent('#dateBadge'), '오늘');
 });
 
-test('프로필에는 화면 설정과 로그아웃만 있고, 로그아웃하면 내 글도 옮길 수 없어요', async () => {
+test('프로필에서 닉네임을 바꾸면 새 글부터 그 이름으로 남고, 비우면 계정 이름으로 돌아가요', async () => {
+  const before = await alice.locator('.note.is-mine').first().locator('.note__sign').textContent();
+  await alice.click('#accountBtn');
+  await alice.waitForSelector('#profile[open]');
+  assert.equal(await alice.inputValue('#nickInput'), '');
+  assert.equal(await alice.getAttribute('#nickInput', 'placeholder'), '앨리스');
+  await alice.fill('#nickInput', '  별빛  ');
+  await alice.press('#nickInput', 'Enter');
+  await alice.waitForFunction(() => !document.querySelector('#profile').open);
+  assert.equal(await alice.textContent('#accountBtn'), '별');
+  await write(alice, { text: '닉네임으로 남긴 글' });
+  const nicked = bob.locator('.note', { hasText: '닉네임으로 남긴 글' });
+  await nicked.waitFor({ timeout: 10_000 });
+  assert.equal(await nicked.locator('.note__sign').textContent(), '별빛');
+  assert.equal(await alice.locator('.note.is-mine').first().locator('.note__sign').textContent(), before, '이미 쓴 글의 이름은 그대로예요');
+  // 새로고침해도 닉네임이 남아 있어요.
+  await alice.reload();
+  await ready(alice);
+  await alice.waitForFunction(() => document.querySelector('#accountBtn').textContent === '별');
+  await alice.click('#accountBtn');
+  assert.equal(await alice.inputValue('#nickInput'), '별빛');
+  await alice.fill('#nickInput', '');
+  await alice.click('#nickSave');
+  await alice.waitForFunction(() => document.querySelector('#accountBtn').textContent === '앨');
+});
+
+test('프로필에는 닉네임, 화면 설정, 로그아웃만 있고, 로그아웃하면 내 글도 옮길 수 없어요', async () => {
   await alice.waitForSelector('.note.is-movable');
   await alice.click('#accountBtn');
   await alice.waitForSelector('#profile[open]');
   const controls = await alice.$$eval('#profile button, #profile input', (els) => els.map((el) => el.id || el.name || el.getAttribute('aria-label')));
-  assert.deepEqual(controls, ['닫기', 'theme', 'theme', 'theme', 'signOutBtn']);
+  assert.deepEqual(controls, ['닫기', 'nickInput', 'nickSave', 'theme', 'theme', 'theme', 'signOutBtn']);
   assert.doesNotMatch(await alice.textContent('#profile'), /alice@example\.com|계정 ID|관리자|이렇게 써요|유리 효과/);
   await alice.check('#profile input[name=theme][value=dark]', { force: true });
   assert.equal(await alice.evaluate(() => document.documentElement.dataset.theme), 'dark');

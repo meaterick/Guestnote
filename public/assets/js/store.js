@@ -5,6 +5,7 @@
 //   notes/{id}   보드에 붙은 글 (작은 사진 포함)
 //   images/{id}  크게 보기용 사진 (글을 눌렀을 때만 불러와요)
 //   admins/{uid} 관리자 표시용 문서 (Firebase 콘솔에서 직접 만들어요)
+//   profiles/{uid} 내 닉네임 (프로필 창에서 바꿔요)
 
 import { accountAuthor } from './notes.js';
 
@@ -33,8 +34,9 @@ export async function createStore(config) {
   const provider = new A.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
-  // 로그인 상태가 바뀌면 관리자인지도 다시 확인하고 화면에 알려요.
+  // 로그인 상태가 바뀌면 관리자인지, 닉네임이 있는지도 확인하고 화면에 알려요.
   const session = { user: null, isAdmin: false };
+  const profileRef = (uid) => F.doc(db, 'profiles', uid);
   const listeners = new Set();
   let ticket = 0;
   let settle;
@@ -42,15 +44,17 @@ export async function createStore(config) {
   A.onAuthStateChanged(auth, async (user) => {
     const my = ++ticket;
     let isAdmin = false;
+    let nickname = '';
     if (user) {
-      try {
-        isAdmin = (await F.getDoc(F.doc(db, 'admins', user.uid))).exists();
-      } catch {
-        isAdmin = false;
-      }
+      const [admin, profile] = await Promise.allSettled([
+        F.getDoc(F.doc(db, 'admins', user.uid)),
+        F.getDoc(profileRef(user.uid)),
+      ]);
+      isAdmin = admin.status === 'fulfilled' && admin.value.exists();
+      if (profile.status === 'fulfilled' && profile.value.exists()) nickname = profile.value.get('name') || '';
     }
     if (my !== ticket) return;
-    session.user = user ? { uid: user.uid, name: user.displayName || '', email: user.email || '' } : null;
+    session.user = user ? { uid: user.uid, name: user.displayName || '', email: user.email || '', nickname } : null;
     session.isAdmin = isAdmin;
     settle();
     for (const fn of listeners) fn();
@@ -128,6 +132,18 @@ export async function createStore(config) {
     get uid() {
       return session.user?.uid ?? null;
     },
+    // 새 글에 붙는 이름: 닉네임, 없으면 Google 계정 이름 (보안 규칙의 authorName()과 같아요)
+    get author() {
+      return session.user ? accountAuthor(session.user.nickname || session.user.name) : '';
+    },
+    // 빈 이름이면 닉네임을 지우고 Google 계정 이름으로 돌아가요.
+    async setNickname(name) {
+      const nickname = name.trim();
+      if (nickname) await F.setDoc(profileRef(session.user.uid), { name: nickname, updatedAt: F.serverTimestamp() });
+      else await F.deleteDoc(profileRef(session.user.uid));
+      session.user = { ...session.user, nickname };
+      for (const fn of listeners) fn();
+    },
     get isAdmin() {
       return session.isAdmin;
     },
@@ -167,7 +183,7 @@ export async function createStore(config) {
       const batch = F.writeBatch(db);
       const note = {
         ...data,
-        author: accountAuthor(session.user.name),
+        author: accountAuthor(session.user.nickname || session.user.name),
         ownerId: session.user.uid,
         createdAt: F.serverTimestamp(),
         updatedAt: F.serverTimestamp(),

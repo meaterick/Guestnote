@@ -81,6 +81,22 @@ test('다른 사람 이름(ownerId)으로는 남길 수 없어요', async () => 
   await assertFails(setDoc(doc(as('bob'), 'notes/n1'), note()));
 });
 
+test('닉네임은 본인만 정하고, 정하면 새 글의 작성자는 닉네임이어야 해요', async () => {
+  const db = as('alice');
+  const nick = (name) => setDoc(doc(db, 'profiles/alice'), { name, updatedAt: serverTimestamp() });
+  for (const bad of ['', '   ', ' 앞공백', '가'.repeat(21), 7]) await assertFails(nick(bad));
+  await assertFails(setDoc(doc(db, 'profiles/alice'), { name: '별빛', updatedAt: serverTimestamp(), extra: 1 }));
+  await assertFails(setDoc(doc(as('bob'), 'profiles/alice'), { name: '사칭', updatedAt: serverTimestamp() }));
+  await assertSucceeds(nick('별빛'));
+  await assertSucceeds(getDoc(doc(db, 'profiles/alice')));
+  await assertFails(getDoc(doc(as('bob'), 'profiles/alice')));
+  await assertFails(setDoc(doc(db, 'notes/old-name'), note({ author: '앨리스' })));
+  await assertSucceeds(setDoc(doc(db, 'notes/nick'), note({ author: '별빛' })));
+  await assertFails(updateDoc(doc(db, 'notes/nick'), { author: '앨리스', updatedAt: serverTimestamp() }));
+  await assertSucceeds(deleteDoc(doc(db, 'profiles/alice')));
+  await assertSucceeds(setDoc(doc(db, 'notes/back'), note({ author: '앨리스' })));
+});
+
 test('작성자는 계정 이름만 사용하고, 저장한 이름은 본인도 바꿀 수 없어요', async () => {
   const db = as('alice');
   await assertFails(setDoc(doc(db, 'notes/forged'), note({ author: '다른 이름' })));

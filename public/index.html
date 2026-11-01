@@ -191,13 +191,22 @@
     </section>
   </dialog>
 
-  <!-- 프로필: 화면 설정과 로그아웃 -->
+  <!-- 프로필: 닉네임, 화면 설정, 로그아웃 -->
   <dialog class="modal modal--menu" id="profile" aria-labelledby="profileTitle">
     <section class="panel glass profile">
       <header class="panel__head">
-        <h2 class="panel__title panel__title--small" id="profileTitle">화면 설정</h2>
+        <h2 class="panel__title panel__title--small" id="profileTitle">설정</h2>
         <button class="icon-btn" type="button" data-close aria-label="닫기"><svg><use href="#i-close"/></svg></button>
       </header>
+      <form class="nick" id="nickForm" novalidate>
+        <label class="nick__label" for="nickInput">닉네임</label>
+        <div class="nick__row">
+          <input class="nick__input" id="nickInput" maxlength="20" autocomplete="nickname" enterkeyhint="done">
+          <button class="btn btn--small btn--primary" id="nickSave" type="submit">저장</button>
+        </div>
+        <p class="nick__hint" id="nickHint">새로 쓰는 글부터 이 이름으로 보여요. 비우면 Google 계정 이름을 써요.</p>
+      </form>
+      <p class="nick__label">화면</p>
       <div class="seg seg--small" role="radiogroup" aria-label="밝기">
         <label class="seg__item"><input type="radio" name="theme" value="auto"><span>기기 설정</span></label>
         <label class="seg__item"><input type="radio" name="theme" value="light"><span>밝게</span></label>

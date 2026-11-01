@@ -6,6 +6,7 @@ rules_version = '2';
 // - 글은 '오늘' 보드에서만 남기고, 옮기고, 고칠 수 있어요. 지난 보드는 읽기만 해요.
 //   오늘은 utcOffsetHours() 시간대의 날짜예요. public/config.js 의 timeZone 을 바꾸면 여기 값도 같이 바꿔 주세요. (한국 = 9)
 // - 내 글은 오늘 안에서 옮기거나 고치거나 지울 수 있어요.
+// - 새 글의 작성자는 내 닉네임(profiles/{uid}), 닉네임이 없으면 Google 계정 이름이에요. 이미 쓴 글의 작성자는 바뀌지 않아요.
 // - 관리자(admins/{uid} 문서가 있는 사람)는 오늘 보드의 남의 글도 옮길 수 있고, 어느 날의 글이든 지울 수 있어요.
 //   지난 글을 옮기거나 고치는 건 관리자도 못 해요.
 // - 보드 크기(4000 x 2600), 글자 수(이름 20자, 내용 500자), 사진 용량은 화면 코드와 맞춰 두었어요.
@@ -31,6 +32,16 @@ service cloud.firestore {
       let raw = request.auth.token.get('name', '');
       let name = raw is string ? raw.trim() : '';
       return name.size() == 0 ? '방문자' : (name.size() > 20 ? name[0:20] : name);
+    }
+
+    // 닉네임: 앞뒤 공백 없이 1~20자. 닉네임을 정했으면 새 글의 작성자는 닉네임, 아니면 Google 계정 이름이에요.
+    function validNickname(n) {
+      return n is string && n.size() >= 1 && n.size() <= 20 && n == n.trim() && n.matches('.*[^\\s].*');
+    }
+
+    function authorName() {
+      let path = /databases/$(database)/documents/profiles/$(request.auth.uid);
+      return exists(path) ? get(path).data.name : accountAuthor();
     }
 
     function isDayKey(d) {
@@ -97,7 +108,7 @@ service cloud.firestore {
 
       allow create: if signedIn()
         && validNote(request.resource.data)
-        && request.resource.data.author == accountAuthor()
+        && request.resource.data.author == authorName()
         && request.resource.data.ownerId == request.auth.uid
         && isToday(request.resource.data.date)
         && request.resource.data.createdAt == request.time
@@ -149,6 +160,15 @@ service cloud.firestore {
     // 관리자 목록은 Firebase 콘솔에서만 만들어요. 자기 문서만 확인할 수 있어요.
     match /admins/{uid} {
       allow get: if signedIn() && request.auth.uid == uid;
+    }
+
+    // 내 닉네임. 본인만 읽고 바꾸고 지울 수 있어요. (지우면 다시 Google 계정 이름을 써요)
+    match /profiles/{uid} {
+      allow get, delete: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'updatedAt'])
+        && validNickname(request.resource.data.name)
+        && request.resource.data.updatedAt == request.time;
     }
   }
 }
