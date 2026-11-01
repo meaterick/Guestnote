@@ -6,6 +6,7 @@
 //   images/{id}  크게 보기용 사진 (글을 눌렀을 때만 불러와요)
 //   admins/{uid} 관리자 표시용 문서 (Firebase 콘솔에서 직접 만들어요)
 //   profiles/{uid} 내 닉네임 (프로필 창에서 바꿔요)
+//   presence/{id}  지금 보는 사람 세기용. 브라우저마다 하나, 마지막으로 본 시각만 담아요.
 
 import { accountAuthor } from './notes.js';
 
@@ -249,6 +250,46 @@ export async function createStore(config) {
         counts.set(k, snap.data().count);
       }));
       return counts;
+    },
+
+    // 지금 보는 사람 수: 화면을 보고 있는 동안 every마다 '여기 있어요'를 남기고,
+    // 최근 window 안에 남긴 브라우저 수를 세요. (세기는 1번 읽기로 끝나서 사람이 많아도 싸요)
+    watchPresence(onCount, { every = 60_000, window: recent = 90_000 } = {}) {
+      const KEY = 'guestnote:visitor';
+      let id = '';
+      try { id = localStorage.getItem(KEY) || ''; } catch { /* 저장 공간을 못 쓰는 브라우저 */ }
+      if (!/^[a-z0-9]{20}$/.test(id)) {
+        id = Array.from(crypto.getRandomValues(new Uint8Array(20)), (b) => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('');
+        try { localStorage.setItem(KEY, id); } catch { /* 이번 방문 동안만 써요 */ }
+      }
+      const ref = F.doc(db, 'presence', id);
+      const col = F.collection(db, 'presence');
+      let timer = 0;
+      const tick = async () => {
+        clearTimeout(timer);
+        if (document.hidden) return;
+        timer = setTimeout(tick, every);
+        try {
+          await F.setDoc(ref, { seen: F.serverTimestamp() });
+          const since = F.Timestamp.fromMillis(Date.now() - recent);
+          const snap = await F.getCountFromServer(F.query(col, F.where('seen', '>', since)));
+          onCount(Math.max(1, snap.data().count));
+        } catch {
+          // 세지 못하면 표시를 숨겨요. (무료 한도를 넘었거나 연결이 끊긴 경우)
+          onCount(null);
+        }
+      };
+      const onVisible = () => { if (!document.hidden) tick(); };
+      // 창을 닫으면 바로 빠지도록 지워 봐요. (못 지워도 window가 지나면 세지 않아요)
+      const onLeave = () => { F.deleteDoc(ref).catch(() => {}); };
+      document.addEventListener('visibilitychange', onVisible);
+      window.addEventListener('pagehide', onLeave);
+      tick();
+      return () => {
+        clearTimeout(timer);
+        document.removeEventListener('visibilitychange', onVisible);
+        window.removeEventListener('pagehide', onLeave);
+      };
     },
 
     async firstDay() {

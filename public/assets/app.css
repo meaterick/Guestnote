@@ -344,6 +344,17 @@ button.chip:hover { background: var(--glass-fill-strong); color: var(--ink); }
 .chip--today { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 button.chip--today:hover { background: var(--accent); color: var(--accent-ink); filter: brightness(1.08); }
 .chip--admin { background: var(--accent-soft); color: var(--ink); }
+/* 지금 보는 사람 수 */
+.chip--live { gap: 6px; font-variant-numeric: tabular-nums; }
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22b36b;
+  box-shadow: 0 0 0 0 rgb(34 179 107 / 0.5);
+  animation: live 2s ease-out infinite;
+}
+@keyframes live { 70% { box-shadow: 0 0 0 6px rgb(34 179 107 / 0); } 100% { box-shadow: 0 0 0 0 rgb(34 179 107 / 0); } }
 
 /* 로그인 전에는 '로그인' 글자, 로그인하면 이름 첫 글자를 담은 동그라미 */
 .account-btn {
@@ -1107,7 +1118,7 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
     padding: 5px 4px 5px 8px;
     border-radius: 22px;
   }
-  .brand__text, #resetChip, #todayBtn { display: none; }
+  .brand__text, #resetChip, #todayBtn, .live-label { display: none; }
   .daynav { justify-self: center; }
   .daynav__date { min-width: 0; padding: 3px 6px 5px; }
   .daynav__main { font-size: 30px; }

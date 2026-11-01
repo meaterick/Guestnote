@@ -293,6 +293,17 @@ test('지난 날의 사진 글은 관리자가 큰 사진과 함께 지울 수 �
   await assertSucceeds(batch.commit());
 });
 
+test('지금 보는 사람 표시는 누구나 남기고 셀 수 있지만, 시각 말고는 못 담아요', async () => {
+  const guest = as(null);
+  const id = 'abcdefghij0123456789';
+  await assertSucceeds(setDoc(doc(guest, `presence/${id}`), { seen: serverTimestamp() }));
+  await assertSucceeds(getCountFromServer(query(collection(guest, 'presence'), where('seen', '>', Timestamp.fromMillis(Date.now() - 90_000)))));
+  await assertFails(setDoc(doc(guest, `presence/${id}`), { seen: Timestamp.fromMillis(Date.now() + 3_600_000) }));
+  await assertFails(setDoc(doc(guest, `presence/${id}`), { seen: serverTimestamp(), name: '앨리스' }));
+  await assertFails(setDoc(doc(guest, 'presence/short'), { seen: serverTimestamp() }));
+  await assertSucceeds(deleteDoc(doc(guest, `presence/${id}`)));
+});
+
 test('관리자 목록은 자기 것만 확인할 수 있고 아무도 못 써요', async () => {
   await seed('admins/root', {});
   await assertSucceeds(getDoc(doc(as('root'), 'admins/root')));

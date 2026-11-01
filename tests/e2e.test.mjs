@@ -14,6 +14,8 @@ const PROJECT = 'demo-guestnote';
 const config = {
   firebase: { apiKey: 'demo-key', authDomain: `${PROJECT}.firebaseapp.com`, projectId: PROJECT, appId: 'demo-app' },
   emulator: { host: '127.0.0.1', firestorePort: 8080, authPort: 9099 },
+  // 테스트에서는 지금 보는 사람 수를 빨리 새로 세요.
+  presence: { every: 1500, window: 4000 },
 };
 
 let app;
@@ -543,7 +545,11 @@ test('휴대폰에서 빈 곳을 두 번 누르면 그 자리에 글상자가 �
   await phone.touchscreen.tap(spot.x + 6, spot.y + 4);
   await phone.waitForSelector('.is-draft textarea');
   // 손가락을 떼는 순간 커서가 들어가서, 키보드가 바로 올라와요.
-  await phone.waitForFunction(() => document.activeElement?.classList.contains('draft__text'), null, { timeout: 2000 });
+  await phone.waitForFunction(() => document.activeElement?.classList.contains('draft__text'), null, { timeout: 2000 })
+    .catch(async (err) => {
+      const info = await phone.evaluate(() => ({ active: `${document.activeElement?.tagName}.${document.activeElement?.className}#${document.activeElement?.id}`, drafts: document.querySelectorAll('.is-draft').length }));
+      throw new Error(`커서 위치: ${JSON.stringify(info)} spot ${JSON.stringify(spot)}`, { cause: err });
+    });
   const box = await phone.locator('.is-draft').boundingBox();
   assert.ok(Math.abs(box.x - spot.x) < 60 && Math.abs(box.y - spot.y) < 60, `누른 자리(${spot.x},${spot.y}) 그대로예요: ${box.x},${box.y}`);
   await phone.keyboard.type('두 번 눌러 바로 써요');
@@ -604,6 +610,20 @@ test('카카오톡·인스타그램 앱 안에서는 Google 로그인 대신 브
   assert.equal(await guest.isVisible('#googleSignIn'), true);
   assert.equal(await guest.isVisible('#inAppBar'), false);
   await guest.keyboard.press('Escape');
+});
+
+test('헤더에 지금 보는 사람 수가 나오고, 창을 닫으면 줄어요', async () => {
+  // alice, bob, guest 세 사람이 보고 있어요.
+  const count = (page) => page.evaluate(() => Number(document.querySelector('#liveCount').textContent));
+  await guest.waitForFunction(() => !document.querySelector('#liveChip').hidden && Number(document.querySelector('#liveCount').textContent) >= 3, null, { timeout: 10_000 });
+  // 앞 테스트에서 닫은 창이 다 빠질 때까지 기다렸다가 세요.
+  await guest.waitForTimeout(5000);
+  const before = await count(guest);
+  const extra = await visitor();
+  await guest.waitForFunction((n) => Number(document.querySelector('#liveCount').textContent) >= n + 1, before, { timeout: 10_000 });
+  await extra.close({ runBeforeUnload: true });
+  await guest.waitForFunction((n) => Number(document.querySelector('#liveCount').textContent) <= n, before, { timeout: 10_000 });
+  assert.match(await guest.getAttribute('#liveChip', 'aria-label'), /지금 \d+명이 보고 있어요/);
 });
 
 test('공유 미리보기 정보와 이미지가 있어요', async () => {

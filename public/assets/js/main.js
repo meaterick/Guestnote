@@ -14,6 +14,8 @@ const config = {
   siteSubtitle: '오늘의 방명록',
   timeZone: 'Asia/Seoul',
   emulator: null,
+  // 지금 보는 사람: 1분마다 남기고, 1분 30초 안에 남긴 사람을 세요.
+  presence: { every: 60_000, window: 90_000 },
   ...userConfig,
   image: {
     thumbSide: 512,
@@ -455,7 +457,7 @@ document.addEventListener('visibilitychange', () => {
 
 // 휴대폰에서 두 번 눌러 글상자를 열면, 손가락을 떼는 순간 커서를 둬요. 아이폰은 이때 둬야 키보드가 바로 올라와요.
 viewport.addEventListener('touchend', () => writer.focusPending(), { passive: true });
-viewport.addEventListener('click', () => writer.focusPending());
+viewport.addEventListener('click', () => writer.focusPending(true));
 
 // 휴대폰 키보드가 올라오면 아래 막대(글쓰기 도구)를 키보드 바로 위로 올리고, 글상자가 보이게 옮겨요.
 // 안드로이드는 키보드만큼 화면 자체가 줄어서(--kb는 0) 크기가 바뀔 때마다 글상자를 다시 확인해요.
@@ -735,6 +737,13 @@ if (state.store) {
   $('#adminChip').hidden = !state.store.isAdmin;
   renderAccount();
   state.store.onAuthChange(onAuthChanged);
+  state.store.watchPresence((n) => {
+    $('#liveChip').hidden = n === null;
+    if (n !== null) {
+      $('#liveCount').textContent = String(n);
+      $('#liveChip').setAttribute('aria-label', `지금 ${n}명이 보고 있어요`);
+    }
+  }, config.presence);
   const start = routeKey();
   if (location.hash && start === state.today) history.replaceState(null, '', location.pathname + location.search);
   state.view = null;

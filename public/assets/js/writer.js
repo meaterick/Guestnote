@@ -274,8 +274,12 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     const end = d.text.value.length;
     d.text.setSelectionRange(end, end);
     // 아이폰은 손가락을 떼는 그 순간에 커서를 둬야만 키보드가 올라와요. 그 순간이 안 오면 조금 뒤에 둬요.
-    if (deferFocus) d.focusTimer = setTimeout(focus, 600);
-    else focus();
+    if (deferFocus) {
+      d.tapUntil = performance.now() + 800;
+      d.focusTimer = setTimeout(focus, 600);
+    } else {
+      focus();
+    }
     if (file) attach(file);
   }
 
@@ -343,9 +347,12 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     },
     // 키보드가 올라오거나 화면 크기가 바뀌면 글상자가 보이게 옮겨요.
     reveal: () => reveal(),
-    // 손가락을 뗀 순간: 두 번 눌러 연 글상자에 아직 커서를 안 뒀으면 지금 둬요.
-    focusPending() {
-      if (d?.focusTimer) focus();
+    // 두 번 눌러 연 글상자는 손가락을 뗀 순간(touchend)과 그 뒤 이어지는 click 때 커서를 둬요.
+    // 글상자가 손가락 밑에서 비켜나 있으면, touchend 뒤의 mousedown이 커서를 보드로 빼앗아 가서 click 때 한 번 더 둬요.
+    focusPending(last = false) {
+      if (!d?.tapUntil || performance.now() > d.tapUntil) return;
+      focus();
+      if (last) d.tapUntil = 0;
     },
     get active() {
       return !!d;
