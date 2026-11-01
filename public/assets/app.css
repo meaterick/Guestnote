@@ -1018,6 +1018,44 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
 .signin__inapp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .signin__inapp .signin__inapp-tip { margin: 0; font-size: 13px; }
 .signin__inapp-tip:empty { display: none; }
+.signin__steps { margin: 10px 0 0; padding-left: 22px; font-size: 14.5px; line-height: 1.7; }
+.signin__steps b { font-size: 1.05em; }
+
+/* 앱 안 브라우저 메뉴(오른쪽 위 ⋯)를 가리키는 표시 */
+.escape-arrow {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 10px);
+  right: 14px;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: oklch(0.93 0.08 85);
+  color: #4a3a05;
+  font-size: 15px;
+  box-shadow: var(--shadow-2);
+  animation: nudge 1s ease-in-out infinite;
+}
+.escape-arrow span { display: inline-block; margin-left: 4px; font-size: 18px; }
+@keyframes nudge { 50% { translate: 4px -4px; } }
+
+.inapp-bar {
+  position: fixed;
+  z-index: 29;
+  top: calc(env(safe-area-inset-top) + 86px);
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  padding: 6px 4px 6px 14px;
+  border-radius: 999px;
+  font-size: 13.5px;
+}
+.inapp-bar__text { min-width: 0; }
+.inapp-bar__close { width: 30px; height: 30px; flex: none; }
+.inapp-bar__close svg { width: 16px; height: 16px; }
 
 .google-btn {
   display: flex;

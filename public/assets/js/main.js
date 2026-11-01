@@ -483,22 +483,66 @@ const isIOS = /iPhone|iPad|iPod/i.test(UA) || (/Macintosh/.test(UA) && navigator
 const inKakao = /KAKAOTALK/i.test(UA);
 const inInstagram = /Instagram/i.test(UA);
 const inAppBrowser = inKakao || inInstagram || /FBAN|FBAV|Line\/|NAVER\(inapp|DaumApps|everytimeApp|; wv\)/i.test(UA);
+const iosMajor = Number(/OS (\d+)_/.exec(UA)?.[1] ?? 0);
+// 아이폰에서 Safari로 바로 넘기는 x-safari- 주소는 공식 기능이 아니라서, 인스타그램(2026년부터)과 iOS 16에서는 막혀요.
+// 그래서 한 번 시도해 보고, 넘어가지 않으면 앱의 ⋯ 메뉴로 여는 방법을 크게 보여 줘요.
+const canJumpToSafari = isIOS && iosMajor !== 16;
+const appName = inKakao ? '카카오톡' : inInstagram ? '인스타그램' : '이 앱';
 
 // 앱 안 브라우저에서는 Google 로그인 버튼 대신 브라우저로 여는 방법을 보여 줘요.
-// 카카오톡은 바로 열기, 아이폰은 Safari로 열기, 안드로이드는 메뉴 안내와 주소 복사를 써요.
+// 카카오톡은 바로 열기, 아이폰은 Safari로 열기를 시도하고, 안 되면(또는 안드로이드는) 메뉴로 여는 방법과 주소 복사를 써요.
 if (inAppBrowser) {
-  const appName = inKakao ? '카카오톡' : inInstagram ? '인스타그램' : '이 앱';
   $('#inAppHint').hidden = false;
   $('#googleSignIn').hidden = true;
   $('#inAppText').textContent = `${appName} 안에서 연 화면에서는 Google이 로그인을 막아요. 브라우저로 열면 바로 글을 남길 수 있어요.`;
   const open = $('#openExternal');
-  open.hidden = !(inKakao || isIOS);
+  open.hidden = !(inKakao || canJumpToSafari);
   open.textContent = inKakao ? '다른 브라우저로 열기' : 'Safari로 열기';
-  $('#inAppTip').textContent = inKakao ? ''
-    : isIOS ? '열리지 않으면 오른쪽 위 ⋯ 메뉴에서 ‘외부 브라우저에서 열기’를 눌러 주세요.'
-      : '오른쪽 위 ⋮ 메뉴에서 ‘다른 브라우저로 열기’를 누르거나, 주소를 복사해서 크롬에 붙여 넣어 주세요.';
+  if (!isIOS) {
+    $('#inAppStep1').innerHTML = '화면 오른쪽 위 <b>⋮</b> 를 눌러요.';
+    $('#inAppStep2').innerHTML = '<b>‘다른 브라우저로 열기’</b>(또는 ‘Chrome으로 열기’)를 눌러요.';
+    $('#escapeArrow').innerHTML = '여기 <b>⋮</b> 를 눌러요 <span>↗</span>';
+  }
+  // 메뉴로 여는 방법은 처음부터 보여 줘요. (카카오톡은 바로 열기가 잘 돼서 빼요)
+  $('#inAppSteps').hidden = inKakao;
+  // 보드 위쪽에도 글을 쓰려면 브라우저로 열어야 한다고 알려 줘요.
+  $('#inAppBar').hidden = false;
+  $('#inAppBarText').textContent = '앱 안에서는 글을 못 써요.';
+  $('#inAppBarOpen').textContent = inKakao ? '다른 브라우저로 열기' : isIOS ? 'Safari로 열기' : '브라우저로 열기';
 }
-const signin = setupDialog($('#signin'), { onClose() { pendingWrite = null; } });
+
+// 바깥 브라우저로 넘겨 보고, 1.5초 안에 화면이 넘어가지 않으면 메뉴로 여는 방법을 가리켜요.
+function showEscapeSteps() {
+  if (!$('#signin').open) askSignIn();
+  $('#inAppSteps').hidden = false;
+  $('#escapeArrow').hidden = false;
+}
+
+function openOutside() {
+  const url = location.href;
+  if (inKakao) {
+    location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(url)}`;
+    return;
+  }
+  if (!canJumpToSafari) {
+    showEscapeSteps();
+    return;
+  }
+  let left = false;
+  const onHide = () => { if (document.hidden) left = true; };
+  document.addEventListener('visibilitychange', onHide);
+  location.href = `x-safari-${url}`;
+  setTimeout(() => {
+    document.removeEventListener('visibilitychange', onHide);
+    if (!left && !document.hidden) showEscapeSteps();
+  }, 1500);
+}
+const signin = setupDialog($('#signin'), {
+  onClose() {
+    pendingWrite = null;
+    $('#escapeArrow').hidden = true;
+  },
+});
 let pendingWrite = null;
 
 function askSignIn(next = null) {
@@ -547,10 +591,9 @@ $('#googleSignIn').addEventListener('click', async (e) => {
   }
 });
 
-$('#openExternal').addEventListener('click', () => {
-  const url = location.href;
-  location.href = inKakao ? `kakaotalk://web/openExternal?url=${encodeURIComponent(url)}` : `x-safari-${url}`;
-});
+$('#openExternal').addEventListener('click', openOutside);
+$('#inAppBarOpen').addEventListener('click', openOutside);
+$('#inAppBarClose').addEventListener('click', () => { $('#inAppBar').hidden = true; });
 
 // 앱 안 브라우저는 클립보드 API를 막기도 해서, 예전 방식으로 한 번 더 시도해요.
 $('#copyLink').addEventListener('click', async (e) => {

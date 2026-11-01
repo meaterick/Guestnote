@@ -73,6 +73,13 @@
     </div>
   </header>
 
+  <!-- 카카오톡·인스타그램 같은 앱 안 브라우저에서만 보여요 -->
+  <div class="inapp-bar glass" id="inAppBar" hidden>
+    <span class="inapp-bar__text" id="inAppBarText"></span>
+    <button class="btn btn--small btn--primary" id="inAppBarOpen" type="button"></button>
+    <button class="icon-btn inapp-bar__close" id="inAppBarClose" type="button" aria-label="안내 닫기"><svg><use href="#i-close"/></svg></button>
+  </div>
+
   <main class="viewport" id="viewport" aria-label="방명록 보드" aria-describedby="boardHelp">
     <p class="sr-only" id="boardHelp">보드를 끌거나 휠을 굴려 둘러볼 수 있어요. Ctrl과 휠, 또는 두 손가락으로 확대하고 줄여요. 빈 곳을 두 번 누르거나 N 키를 누르면 그 자리에 바로 글을 쓰고, Enter로 올려요. 줄은 Shift+Enter로 바꿔요. 글은 Tab으로 차례대로 가서 Enter로 고르고, 내 글은 화살표 키로 옮겨요.</p>
     <div class="world" id="world">
@@ -169,7 +176,7 @@
         <button class="icon-btn" type="button" data-close aria-label="닫기"><svg><use href="#i-close"/></svg></button>
       </header>
       <p class="signin__lead">글을 남기고 내 글을 옮기려면 Google 계정으로 로그인해 주세요. 보드는 로그인하지 않아도 볼 수 있어요.</p>
-      <p class="signin__note">이메일과 프로필 사진은 보드에 나오지 않아요. 작성자는 Google 계정 이름으로 표시되며 여기서 바꿀 수 없어요.</p>
+      <p class="signin__note">이메일과 프로필 사진은 보드에 나오지 않아요. 작성자는 Google 계정 이름으로 표시되고, 로그인한 뒤 프로필에서 닉네임으로 바꿀 수 있어요.</p>
       <div class="signin__inapp" id="inAppHint" hidden>
         <p id="inAppText"></p>
         <div class="signin__inapp-actions">
@@ -177,6 +184,10 @@
           <button class="btn" id="copyLink" type="button">주소 복사</button>
         </div>
         <p class="signin__inapp-tip" id="inAppTip"></p>
+        <ol class="signin__steps" id="inAppSteps" hidden>
+          <li id="inAppStep1">화면 오른쪽 위 <b>⋯</b> 를 눌러요.</li>
+          <li id="inAppStep2"><b>‘외부 브라우저에서 열기’</b>(또는 ‘Safari에서 열기’)를 눌러요.</li>
+        </ol>
       </div>
       <p class="form-error" id="signinError" role="alert" hidden></p>
       <button class="google-btn" id="googleSignIn" type="button">
@@ -189,6 +200,8 @@
         <span>Google로 로그인</span>
       </button>
     </section>
+    <!-- 패널(유리 효과) 바깥에 둬야 화면 오른쪽 위에 붙어요 -->
+    <p class="escape-arrow" id="escapeArrow" hidden aria-hidden="true">여기 <b>⋯</b> 를 눌러요 <span>↗</span></p>
   </dialog>
 
   <!-- 프로필: 닉네임, 화면 설정, 로그아웃 -->

@@ -570,13 +570,39 @@ test('카카오톡·인스타그램 앱 안에서는 Google 로그인 대신 브
     assert.equal(await page.isVisible('#copyLink'), true, c.name);
     if (c.open) assert.equal(await page.textContent('#openExternal'), c.open);
     else assert.equal(await page.isVisible('#openExternal'), false, c.name);
+    // 카카오톡 말고는 메뉴로 여는 방법을 처음부터 보여 줘요.
+    assert.equal(await page.isVisible('#inAppSteps'), c.name !== '카카오톡', c.name);
+    await page.keyboard.press('Escape');
+    // 보드 위쪽에도 앱 안에서는 글을 쓸 수 없다고 알려 줘요.
+    assert.equal(await page.isVisible('#inAppBar'), true, c.name);
+    if (c.name === '아이폰 인스타그램') {
+      // Safari로 넘어가지 않으면 1.5초 뒤 ⋯ 메뉴를 가리켜요.
+      await page.tap('#inAppBarOpen');
+      await page.waitForSelector('#escapeArrow:not([hidden])', { timeout: 4000 });
+      assert.equal(await page.isVisible('#signin[open] #inAppSteps'), true);
+      const arrow = await page.locator('#escapeArrow').boundingBox();
+      assert.ok(arrow.y < 60 && arrow.x + arrow.width > page.viewportSize().width - 40, '오른쪽 위를 가리켜요');
+    }
+    if (c.name === '안드로이드 인스타그램') {
+      await page.tap('#inAppBarOpen');
+      await page.waitForSelector('#escapeArrow:not([hidden])');
+      assert.match(await page.textContent('#inAppSteps'), /⋮.*다른 브라우저로 열기/s);
+    }
     await page.context().close();
   }
+  // iOS 16에서는 Safari로 바로 넘기는 방법이 막혀서 버튼 대신 메뉴 안내만 보여요.
+  const ios16 = await visitor({ ...iphone, userAgent: iphone.userAgent.replace(/OS \d+_\d+/, 'OS 16_6') + ' Instagram 350.0.0.0' });
+  await ios16.tap('#writeBtn');
+  await ios16.waitForSelector('#signin[open]');
+  assert.equal(await ios16.isVisible('#openExternal'), false);
+  assert.equal(await ios16.isVisible('#inAppSteps'), true);
+  await ios16.context().close();
   // 보통 브라우저에서는 Google 버튼만 보여요.
   await guest.click('#writeBtn');
   await guest.waitForSelector('#signin[open]');
   assert.equal(await guest.isVisible('#inAppHint'), false);
   assert.equal(await guest.isVisible('#googleSignIn'), true);
+  assert.equal(await guest.isVisible('#inAppBar'), false);
   await guest.keyboard.press('Escape');
 });
 
