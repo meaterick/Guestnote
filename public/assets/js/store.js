@@ -278,21 +278,21 @@ export async function createStore(config) {
 
       const emit = () => {
         const cutoff = Date.now() + skew - recent;
+        // 목록(people, anonymous)에는 나를 빼요. 같은 계정으로 연 다른 기기도 나예요.
+        // total은 나까지 센 수예요. (내 기록이 아직 반영 전이어도 나는 세요)
         const named = new Map();
         let anonymous = 0;
-        // 나는 언제나 목록에 있어요. (내 기록이 아직 반영 전이어도요)
-        if (session.user) named.set(session.user.uid, { uid: session.user.uid, name: myName(), me: true });
-        else anonymous += 1;
+        const me = session.user?.uid;
         for (const d of docs) {
           if (d.id === id || d.seen < cutoff) continue;
           if (d.uid && d.name) {
-            if (!named.has(d.uid)) named.set(d.uid, { uid: d.uid, name: d.name, me: false });
+            if (d.uid !== me && !named.has(d.uid)) named.set(d.uid, { uid: d.uid, name: d.name });
           } else {
             anonymous += 1;
           }
         }
-        const people = [...named.values()].sort((a, b) => (b.me - a.me) || a.name.localeCompare(b.name, 'ko'));
-        onChange({ people, anonymous, total: people.length + anonymous });
+        const people = [...named.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+        onChange({ people, anonymous, total: people.length + anonymous + 1 });
       };
 
       const write = async () => {

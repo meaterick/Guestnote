@@ -650,7 +650,7 @@ function hueOf(text) {
   return (h >>> 0) % 360;
 }
 
-function whoRow({ name, sub = '', tag = '', anon = false, hue = 0 }) {
+function whoRow({ name, sub = '', anon = false, hue = 0 }) {
   const li = document.createElement('li');
   li.className = anon ? 'who who--anon' : 'who';
   const avatar = document.createElement('span');
@@ -674,12 +674,6 @@ function whoRow({ name, sub = '', tag = '', anon = false, hue = 0 }) {
     text.append(small);
   }
   li.append(avatar, text);
-  if (tag) {
-    const pill = document.createElement('span');
-    pill.className = 'who__me';
-    pill.textContent = tag;
-    li.append(pill);
-  }
   return li;
 }
 
@@ -690,14 +684,14 @@ function renderViewers() {
     $('#viewerList').replaceChildren();
     return;
   }
-  $('#viewersCount').textContent = String(who.total);
-  $('#viewersStatus').textContent = '명이 함께 보고 있어요';
-  const rows = who.people.map((p) => whoRow({ name: p.name, tag: p.me ? '나' : '', hue: hueOf(p.uid) }));
+  const others = who.total - 1;
+  $('#viewersCount').textContent = others ? String(others) : '';
+  $('#viewersStatus').textContent = others ? '명이 함께 보고 있어요' : '지금은 나 혼자 보고 있어요';
+  const rows = who.people.map((p) => whoRow({ name: p.name, hue: hueOf(p.uid) }));
   if (who.anonymous) {
     rows.push(whoRow({
       name: who.anonymous === 1 ? '익명' : `익명 ${who.anonymous}명`,
       sub: '로그인하지 않은 방문자',
-      tag: state.store.user ? '' : (who.anonymous === 1 ? '나' : '나 포함'),
       anon: true,
     }));
   }

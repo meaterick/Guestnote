@@ -631,7 +631,7 @@ test('지금 보는 사람을 누르면 로그인한 사람은 이름, 나머지
   const carol = await visitor();
   await signInWithGoogle(carol, '캐럴', 'carol@example.com');
   await guest.waitForSelector('#liveChip:not([hidden])');
-  const names = (page) => page.$$eval('#viewerList .who', (els) => els.map((el) => [...el.querySelectorAll('.who__name, .who__me')].map((x) => x.textContent).join(' ')));
+  const names = (page) => page.$$eval('#viewerList .who__name', (els) => els.map((el) => el.textContent));
   const listed = (page, name) => page.evaluate((n) => [...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === n), name);
   await guest.click('#liveChip');
   await guest.waitForSelector('#viewers[open]');
@@ -640,8 +640,8 @@ test('지금 보는 사람을 누르면 로그인한 사람은 이름, 나머지
   const seen = await names(guest);
   const anon = seen.find((t) => t.startsWith('익명'));
   assert.ok(anon, `익명 줄이 있어요: ${JSON.stringify(seen)}`);
-  assert.match(anon, /나/, '로그인 안 한 나는 익명에 들어가요');
-  assert.equal(Number(await guest.textContent('#viewersCount')), Number(await guest.textContent('#liveCount')));
+  // 목록에는 나를 빼고 보여 줘요. (헤더 숫자는 나까지 센 수)
+  assert.equal(Number(await guest.textContent('#viewersCount')), Number(await guest.textContent('#liveCount')) - 1);
   assert.equal(await guest.textContent('#viewersStatus'), '명이 함께 보고 있어요');
   // 열어 둔 채로 캐럴이 나가면 바로 빠져요.
   const leaving = await visitor();
@@ -651,11 +651,11 @@ test('지금 보는 사람을 누르면 로그인한 사람은 이름, 나머지
   await guest.waitForFunction(() => ![...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === '데이브'), null, { timeout: 5_000 });
   assert.equal(await listed(guest, '캐럴'), true);
   await guest.keyboard.press('Escape');
-  // 로그인한 사람에게는 자기 이름 옆에 '나'가 붙어요.
+  // 로그인한 사람에게도 자기 이름은 안 보여요.
   await carol.click('#liveChip');
   await carol.waitForSelector('#viewers[open]');
   await carol.waitForFunction(() => document.querySelector('#viewerList .who'));
-  assert.equal((await names(carol))[0], '캐럴 나');
+  assert.equal((await names(carol)).includes('캐럴'), false);
   // 다른 탭으로 가면 바로 빠지고, 돌아오면 다시 나타나요.
   await carol.keyboard.press('Escape');
   await guest.click('#liveChip');
