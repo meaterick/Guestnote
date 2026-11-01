@@ -276,7 +276,13 @@ export async function createStore(config) {
         if (document.hidden) return;
         timer = setTimeout(tick, every);
         try {
-          await F.setDoc(ref, mark());
+          try {
+            await F.setDoc(ref, mark());
+          } catch (err) {
+            // 이름을 남기는 규칙이 아직 게시되지 않았으면 익명으로라도 세요.
+            if (err?.code !== 'permission-denied' || !session.user) throw err;
+            await F.setDoc(ref, { seen: F.serverTimestamp() });
+          }
           const snap = await F.getCountFromServer(recentQuery());
           onCount(Math.max(1, snap.data().count));
         } catch {
