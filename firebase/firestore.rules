@@ -158,12 +158,17 @@ service cloud.firestore {
     }
 
     // 관리자 목록은 Firebase 콘솔에서만 만들어요. 자기 문서만 확인할 수 있어요.
-    // 지금 보는 사람 세기. 로그인하지 않은 방문자도 쓰고, 마지막으로 본 시각(서버 시각)만 담아요.
+    // 지금 보는 사람. 로그인하지 않은 방문자도 남기고, 서버 시각(+ 로그인했으면 내 uid와 이름)만 담아요.
     match /presence/{id} {
       allow list: if true;
+      // 익명이면 시각만, 로그인했으면 내 uid와 내 이름(글에 붙는 이름과 같아요)도 남길 수 있어요.
       allow create, update: if id.matches('[a-z0-9]{20}')
-        && request.resource.data.keys().hasOnly(['seen'])
-        && request.resource.data.seen == request.time;
+        && request.resource.data.seen == request.time
+        && (request.resource.data.keys().hasOnly(['seen'])
+          || (signedIn()
+            && request.resource.data.keys().hasOnly(['seen', 'uid', 'name'])
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.name == authorName()));
       allow delete: if id.matches('[a-z0-9]{20}');
     }
 

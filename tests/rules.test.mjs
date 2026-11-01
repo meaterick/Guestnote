@@ -304,6 +304,24 @@ test('지금 보는 사람 표시는 누구나 남기고 셀 수 있지만, 시�
   await assertSucceeds(deleteDoc(doc(guest, `presence/${id}`)));
 });
 
+test('지금 보는 사람에 이름은 로그인한 본인 것만, 글에 붙는 이름 그대로 남길 수 있어요', async () => {
+  const id = 'abcdefghij0123456789';
+  const alice = as('alice');
+  const mark = (db, over = {}) => setDoc(doc(db, `presence/${id}`), { seen: serverTimestamp(), uid: 'alice', name: '앨리스', ...over });
+  await assertSucceeds(mark(alice));
+  await assertSucceeds(getDocs(query(collection(as(null), 'presence'), where('seen', '>', Timestamp.fromMillis(Date.now() - 90_000)))));
+  await assertFails(mark(as(null)));
+  await assertFails(mark(as('bob')));
+  await assertFails(mark(as('bob'), { uid: 'bob' }));
+  await assertFails(mark(alice, { name: '관리자' }));
+  await assertFails(mark(alice, { extra: 1 }));
+  await assertFails(mark(as('alice', 'anonymous')));
+  await setDoc(doc(alice, 'profiles/alice'), { name: '별빛', updatedAt: serverTimestamp() });
+  await assertFails(mark(alice));
+  await assertSucceeds(mark(alice, { name: '별빛' }));
+  await assertSucceeds(setDoc(doc(alice, `presence/${id}`), { seen: serverTimestamp() }));
+});
+
 test('관리자 목록은 자기 것만 확인할 수 있고 아무도 못 써요', async () => {
   await seed('admins/root', {});
   await assertSucceeds(getDoc(doc(as('root'), 'admins/root')));

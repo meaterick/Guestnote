@@ -6,7 +6,7 @@
 //   images/{id}  크게 보기용 사진 (글을 눌렀을 때만 불러와요)
 //   admins/{uid} 관리자 표시용 문서 (Firebase 콘솔에서 직접 만들어요)
 //   profiles/{uid} 내 닉네임 (프로필 창에서 바꿔요)
-//   presence/{id}  지금 보는 사람 세기용. 브라우저마다 하나, 마지막으로 본 시각만 담아요.
+//   presence/{id}  지금 보는 사람. 브라우저마다 하나, 마지막으로 본 시각 (+ 로그인했으면 uid와 이름)
 
 import { accountAuthor } from './notes.js';
 
@@ -254,6 +254,8 @@ export async function createStore(config) {
 
     // 지금 보는 사람 수: 화면을 보고 있는 동안 every마다 '여기 있어요'를 남기고,
     // 최근 window 안에 남긴 브라우저 수를 세요. (세기는 1번 읽기로 끝나서 사람이 많아도 싸요)
+    // 지금 보는 사람: 1분마다 "보고 있음"을 남기고 최근 window 안에 남긴 사람 수를 알려 줘요.
+    // 로그인했으면 이름도 남겨서 누가 보는지 보여 줄 수 있어요. (익명 방문자는 시각만 남겨요)
     watchPresence(onCount, { every = 60_000, window: recent = 90_000 } = {}) {
       const KEY = 'guestnote:visitor';
       let id = '';
@@ -264,31 +266,66 @@ export async function createStore(config) {
       }
       const ref = F.doc(db, 'presence', id);
       const col = F.collection(db, 'presence');
+      const recentQuery = () => F.query(col, F.where('seen', '>', F.Timestamp.fromMillis(Date.now() - recent)));
+      const mark = () => (session.user
+        ? { seen: F.serverTimestamp(), uid: session.user.uid, name: accountAuthor(session.user.nickname || session.user.name) }
+        : { seen: F.serverTimestamp() });
       let timer = 0;
       const tick = async () => {
         clearTimeout(timer);
         if (document.hidden) return;
         timer = setTimeout(tick, every);
         try {
-          await F.setDoc(ref, { seen: F.serverTimestamp() });
-          const since = F.Timestamp.fromMillis(Date.now() - recent);
-          const snap = await F.getCountFromServer(F.query(col, F.where('seen', '>', since)));
+          await F.setDoc(ref, mark());
+          const snap = await F.getCountFromServer(recentQuery());
           onCount(Math.max(1, snap.data().count));
         } catch {
           // 세지 못하면 표시를 숨겨요. (무료 한도를 넘었거나 연결이 끊긴 경우)
           onCount(null);
         }
       };
+      // 로그인/로그아웃하거나 닉네임을 바꾸면 바로 다시 남겨요.
+      let last = session.user ? `${session.user.uid}:${session.user.nickname}:${session.user.name}` : '';
+      const onAuth = () => {
+        const now = session.user ? `${session.user.uid}:${session.user.nickname}:${session.user.name}` : '';
+        if (now !== last) { last = now; tick(); }
+      };
       const onVisible = () => { if (!document.hidden) tick(); };
       // 창을 닫으면 바로 빠지도록 지워 봐요. (못 지워도 window가 지나면 세지 않아요)
       const onLeave = () => { F.deleteDoc(ref).catch(() => {}); };
+      listeners.add(onAuth);
       document.addEventListener('visibilitychange', onVisible);
       window.addEventListener('pagehide', onLeave);
       tick();
-      return () => {
-        clearTimeout(timer);
-        document.removeEventListener('visibilitychange', onVisible);
-        window.removeEventListener('pagehide', onLeave);
+      return {
+        // 누가 보는지: 로그인한 사람은 이름(같은 계정은 한 번만), 나머지는 익명 수.
+        // 목록을 열 때만 불러서 읽기 횟수를 아껴요.
+        async list() {
+          const snap = await F.getDocs(recentQuery());
+          const named = new Map();
+          let anonymous = 0;
+          // 내 기록은 반영 전일 수 있어서 지금 상태로 직접 넣어요.
+          if (session.user) named.set(session.user.uid, { uid: session.user.uid, name: accountAuthor(session.user.nickname || session.user.name), me: true });
+          else anonymous += 1;
+          for (const d of snap.docs) {
+            if (d.id === id) continue;
+            const uid = d.get('uid');
+            const name = d.get('name');
+            if (typeof uid === 'string' && typeof name === 'string' && name) {
+              if (!named.has(uid)) named.set(uid, { uid, name, me: false });
+            } else {
+              anonymous += 1;
+            }
+          }
+          const people = [...named.values()].sort((a, b) => (b.me - a.me) || a.name.localeCompare(b.name, 'ko'));
+          return { people, anonymous, total: people.length + anonymous };
+        },
+        stop() {
+          clearTimeout(timer);
+          listeners.delete(onAuth);
+          document.removeEventListener('visibilitychange', onVisible);
+          window.removeEventListener('pagehide', onLeave);
+        },
       };
     },
 

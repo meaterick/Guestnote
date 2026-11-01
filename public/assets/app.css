@@ -346,6 +346,26 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
 .chip--admin { background: var(--accent-soft); color: var(--ink); }
 /* 지금 보는 사람 수 */
 .chip--live { gap: 6px; font-variant-numeric: tabular-nums; }
+button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
+.viewers__status { margin: 0 0 10px; font-size: 13.5px; color: var(--ink-2); }
+.viewers__list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; max-height: 50dvh; overflow: auto; }
+.viewer { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 14px; background: var(--soft-fill); font-size: 15px; }
+.viewer__avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.viewer__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer__me { flex: none; margin-left: auto; font-size: 12px; color: var(--ink-2); }
+.viewer--anon { color: var(--ink-2); }
+.viewer--anon .viewer__avatar { background: var(--glass-fill-strong); color: var(--ink-2); }
 .live-dot {
   width: 8px;
   height: 8px;
@@ -1123,7 +1143,7 @@ button.chip--today:hover { background: var(--accent); color: var(--accent-ink); 
   .daynav__date { min-width: 0; padding: 3px 6px 5px; }
   .daynav__main { font-size: 30px; }
   .icon-btn { width: 36px; height: 36px; }
-  .chip { padding: 5px 9px; font-size: 12px; }
+  .chip, button.chip--live { padding: 5px 9px; font-size: 12px; }
   .account-btn { height: 32px; padding: 0 11px; font-size: 12.5px; }
   .account-btn.is-signed-in { width: 32px; min-width: 32px; }
 

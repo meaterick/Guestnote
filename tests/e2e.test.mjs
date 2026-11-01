@@ -626,6 +626,32 @@ test('헤더에 지금 보는 사람 수가 나오고, 창을 닫으면 줄어�
   assert.match(await guest.getAttribute('#liveChip', 'aria-label'), /지금 \d+명이 보고 있어요/);
 });
 
+test('지금 보는 사람을 누르면 로그인한 사람은 이름, 나머지는 익명으로 보여요', async () => {
+  const carol = await visitor();
+  await signInWithGoogle(carol, '캐럴', 'carol@example.com');
+  await guest.waitForSelector('#liveChip:not([hidden])');
+  const names = (page) => page.$$eval('#viewerList .viewer', (els) => els.map((el) => [...el.querySelectorAll('.viewer__name, .viewer__me')].map((x) => x.textContent).join(' ')));
+  await guest.click('#liveChip');
+  await guest.waitForSelector('#viewers[open]');
+  await guest.waitForFunction(() => [...document.querySelectorAll('#viewerList .viewer__name')].some((el) => el.textContent === '캐럴'), null, { timeout: 10_000 });
+  const seen = await names(guest);
+  const anon = seen.find((t) => t.startsWith('익명'));
+  assert.ok(anon, `익명 줄이 있어요: ${JSON.stringify(seen)}`);
+  assert.match(anon, /나/, '로그인 안 한 나는 익명에 들어가요');
+  assert.match(await guest.textContent('#viewersStatus'), /^\d+명이 보고 있어요$/);
+  await guest.keyboard.press('Escape');
+  // 로그인한 사람에게는 자기 이름 옆에 '나'가 붙어요.
+  await carol.click('#liveChip');
+  await carol.waitForSelector('#viewers[open]');
+  await carol.waitForFunction(() => document.querySelector('#viewerList .viewer'));
+  assert.equal((await names(carol))[0], '캐럴 나');
+  // 창을 닫으면 목록에서 빠져요.
+  await carol.context().close();
+  await guest.click('#liveChip');
+  await guest.waitForFunction(() => ![...document.querySelectorAll('#viewerList .viewer__name')].some((el) => el.textContent === '캐럴'), null, { timeout: 10_000 });
+  await guest.keyboard.press('Escape');
+});
+
 test('공유 미리보기 정보와 이미지가 있어요', async () => {
   const og = await guest.$$eval('meta[property^="og:"]', (els) => Object.fromEntries(els.map((m) => [m.getAttribute('property'), m.content])));
   assert.equal(og['og:title'], 'Guestnote 오늘의 방명록');
