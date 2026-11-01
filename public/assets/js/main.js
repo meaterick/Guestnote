@@ -485,12 +485,18 @@ const UA = navigator.userAgent;
 const isIOS = /iPhone|iPad|iPod/i.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1);
 const inKakao = /KAKAOTALK/i.test(UA);
 const inInstagram = /Instagram/i.test(UA);
-const inAppBrowser = inKakao || inInstagram || /FBAN|FBAV|Line\/|NAVER\(inapp|DaumApps|everytimeApp|; wv\)/i.test(UA);
+const inAppBrowser = inKakao || inInstagram || /Barcelona/i.test(UA) || /FBAN|FBAV|Line\/|NAVER\(inapp|DaumApps|everytimeApp|; wv\)/i.test(UA);
+const inThreads = /Barcelona/i.test(UA);
 const iosMajor = Number(/OS (\d+)_/.exec(UA)?.[1] ?? 0);
-// 아이폰에서 Safari로 바로 넘기는 x-safari- 주소는 공식 기능이 아니라서, 인스타그램(2026년부터)과 iOS 16에서는 막혀요.
-// 그래서 한 번 시도해 보고, 넘어가지 않으면 앱의 ⋯ 메뉴로 여는 방법을 크게 보여 줘요.
-const canJumpToSafari = isIOS && iosMajor !== 16;
-const appName = inKakao ? '카카오톡' : inInstagram ? '인스타그램' : '이 앱';
+// 아이폰에서 바깥 브라우저로 넘기는 방법
+// - 인스타그램/스레드: 앱이 스스로 지원하는 instagram://extbrowser/ (barcelona://extbrowser/) 주소를 눌러서 열어요.
+//   인스타그램이 '인스타그램 밖에서 열까요?'를 한 번 묻고, 기기의 기본 브라우저(보통 Safari)로 열어요.
+//   (2026년 3월부터 인스타그램은 x-safari- 주소를 막아요. 이 주소도 누른 순간에만 통해서 버튼으로 열어요)
+// - 그 밖의 앱: x-safari- 주소를 써요. (공식 기능이 아니라 iOS 16에서는 막혀요)
+// 넘어가지 않으면 앱의 ⋯ 메뉴로 여는 방법을 크게 보여 줘요.
+const metaScheme = isIOS && (inInstagram || inThreads) ? (inThreads ? 'barcelona' : 'instagram') : '';
+const canJumpToSafari = isIOS && (metaScheme !== '' || iosMajor !== 16);
+const appName = inKakao ? '카카오톡' : inThreads ? '스레드' : inInstagram ? '인스타그램' : '이 앱';
 
 // 앱 안 브라우저에서는 Google 로그인 버튼 대신 브라우저로 여는 방법을 보여 줘요.
 // 카카오톡은 바로 열기, 아이폰은 Safari로 열기를 시도하고, 안 되면(또는 안드로이드는) 메뉴로 여는 방법과 주소 복사를 써요.
@@ -531,14 +537,31 @@ function openOutside() {
     showEscapeSteps();
     return;
   }
+  // 앱이 바뀌었는지 알려 주는 신호가 없어서, 화면이 가려지거나 멈췄던 흔적(타이머가 크게 늦음)으로 짐작해요.
   let left = false;
   const onHide = () => { if (document.hidden) left = true; };
+  const onBlur = () => { left = true; };
+  let lastTick = Date.now();
+  const drift = setInterval(() => {
+    if (Date.now() - lastTick > 900) left = true;
+    lastTick = Date.now();
+  }, 250);
   document.addEventListener('visibilitychange', onHide);
-  location.href = `x-safari-${url}`;
+  window.addEventListener('pagehide', onBlur);
+  window.addEventListener('blur', onBlur);
+  const target = metaScheme
+    ? `${metaScheme}://extbrowser/?url=${encodeURIComponent(url)}`
+    : `x-safari-${url}`;
+  root.dataset.escape = target; // 어디로 넘기려 했는지 남겨요. (확인용)
+  location.href = target;
+  // 인스타그램은 '밖에서 열까요?' 창을 먼저 띄우니 넉넉히 기다려요.
   setTimeout(() => {
+    clearInterval(drift);
     document.removeEventListener('visibilitychange', onHide);
+    window.removeEventListener('pagehide', onBlur);
+    window.removeEventListener('blur', onBlur);
     if (!left && !document.hidden) showEscapeSteps();
-  }, 1500);
+  }, metaScheme ? 2500 : 1500);
 }
 const signin = setupDialog($('#signin'), {
   onClose() {

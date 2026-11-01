@@ -583,9 +583,10 @@ test('카카오톡·인스타그램 앱 안에서는 Google 로그인 대신 브
     // 보드 위쪽에도 앱 안에서는 글을 쓸 수 없다고 알려 줘요.
     assert.equal(await page.isVisible('#inAppBar'), true, c.name);
     if (c.name === '아이폰 인스타그램') {
-      // Safari로 넘어가지 않으면 1.5초 뒤 ⋯ 메뉴를 가리켜요.
+      // 인스타그램이 스스로 지원하는 주소로 바깥 브라우저를 열고, 넘어가지 않으면 ⋯ 메뉴를 가리켜요.
       await page.tap('#inAppBarOpen');
-      await page.waitForSelector('#escapeArrow:not([hidden])', { timeout: 4000 });
+      assert.equal(await page.evaluate(() => document.documentElement.dataset.escape), `instagram://extbrowser/?url=${encodeURIComponent(await page.evaluate(() => location.href))}`);
+      await page.waitForSelector('#escapeArrow:not([hidden])', { timeout: 5000 });
       assert.equal(await page.isVisible('#signin[open] #inAppSteps'), true);
       const arrow = await page.locator('#escapeArrow').boundingBox();
       assert.ok(arrow.y < 60 && arrow.x + arrow.width > page.viewportSize().width - 40, '오른쪽 위를 가리켜요');
@@ -597,13 +598,23 @@ test('카카오톡·인스타그램 앱 안에서는 Google 로그인 대신 브
     }
     await page.context().close();
   }
-  // iOS 16에서는 Safari로 바로 넘기는 방법이 막혀서 버튼 대신 메뉴 안내만 보여요.
-  const ios16 = await visitor({ ...iphone, userAgent: iphone.userAgent.replace(/OS \d+_\d+/, 'OS 16_6') + ' Instagram 350.0.0.0' });
+  // iOS 16에서는 x-safari- 주소가 막혀서 (페이스북 앱 등은) 버튼 대신 메뉴 안내만 보여요.
+  const ios16 = await visitor({ ...iphone, userAgent: iphone.userAgent.replace(/OS \d+_\d+/, 'OS 16_6') + ' [FBAN/FBIOS;FBAV/450.0.0.0]' });
   await ios16.tap('#writeBtn');
   await ios16.waitForSelector('#signin[open]');
   assert.equal(await ios16.isVisible('#openExternal'), false);
   assert.equal(await ios16.isVisible('#inAppSteps'), true);
   await ios16.context().close();
+  // 인스타그램은 자기 주소를 쓰니 iOS 16에서도 버튼이 있고, 스레드는 스레드 주소를 써요.
+  for (const [ua, scheme] of [[' Instagram 350.0.0.0', 'instagram'], [' Barcelona 350.0.0.0', 'barcelona']]) {
+    const p = await visitor({ ...iphone, userAgent: iphone.userAgent.replace(/OS \d+_\d+/, 'OS 16_6') + ua });
+    await p.tap('#writeBtn');
+    await p.waitForSelector('#signin[open]');
+    assert.equal(await p.isVisible('#openExternal'), true, scheme);
+    await p.tap('#openExternal');
+    assert.match(await p.evaluate(() => document.documentElement.dataset.escape), new RegExp(`^${scheme}://extbrowser/\\?url=https?%3A`));
+    await p.context().close();
+  }
   // 보통 브라우저에서는 Google 버튼만 보여요.
   await guest.click('#writeBtn');
   await guest.waitForSelector('#signin[open]');
