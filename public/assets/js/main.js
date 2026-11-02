@@ -14,8 +14,8 @@ const config = {
   siteSubtitle: '오늘의 방명록',
   timeZone: 'Asia/Seoul',
   emulator: null,
-  // 지금 보는 사람: 1분마다 남기고, 1분 30초 안에 남긴 사람을 세요.
-  presence: { every: 60_000, window: 90_000 },
+  // 퇴장은 바로 반영하고, 강제 종료로 남은 기록은 25초 뒤 제외해요.
+  presence: { every: 10_000, window: 25_000 },
   ...userConfig,
   image: {
     thumbSide: 512,
@@ -295,7 +295,7 @@ async function startWriting(opts = {}) {
   }
   if (state.view !== state.today) goTo(state.today);
   selection.clear();
-  writer.start({ ...opts, defaultAuthor: state.store.author });
+  writer.start(opts);
 }
 
 function authErrorMessage(err) {
@@ -498,65 +498,22 @@ if (window.visualViewport) {
 // 알림은 아래 막대 바로 위에 떠요. 막대 높이가 바뀌면 같이 올라가요.
 new ResizeObserver(() => root.style.setProperty('--dock-h', `${dock.offsetHeight}px`)).observe(dock);
 
-// ---------- 설정: 닉네임, 화면 ----------
+// ---------- 설정: 화면 ----------
 const profile = setupDialog($('#profile'));
 
 // ---------- 지금 보는 사람 ----------
 const viewers = setupDialog($('#viewers'));
 
-// 이름마다 늘 같은 빛깔이 나오게 해요.
-function hueOf(text) {
-  let h = 2166136261;
-  for (const ch of text) h = Math.imul(h ^ ch.codePointAt(0), 16777619);
-  return (h >>> 0) % 360;
-}
-
-function whoRow({ name, sub = '', anon = false, hue = 0 }) {
-  const li = document.createElement('li');
-  li.className = anon ? 'who who--anon' : 'who';
-  const avatar = document.createElement('span');
-  avatar.className = 'who__avatar';
-  avatar.setAttribute('aria-hidden', 'true');
-  if (anon) avatar.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="4"/><path d="M4.5 20c.8-4 3.8-6 7.5-6s6.7 2 7.5 6"/></svg>';
-  else {
-    avatar.textContent = Array.from(name)[0] || '?';
-    avatar.style.setProperty('--hue', String(hue));
-  }
-  const text = document.createElement('span');
-  text.className = 'who__text';
-  const label = document.createElement('span');
-  label.className = 'who__name';
-  label.textContent = name;
-  text.append(label);
-  if (sub) {
-    const small = document.createElement('span');
-    small.className = 'who__sub';
-    small.textContent = sub;
-    text.append(small);
-  }
-  li.append(avatar, text);
-  return li;
-}
-
 function renderViewers() {
   const who = state.presence;
   if (!who) {
+    $('#viewersCount').textContent = '';
     $('#viewersStatus').textContent = '지금은 불러오지 못했어요';
-    $('#viewerList').replaceChildren();
     return;
   }
   const others = who.total;
   $('#viewersCount').textContent = others ? String(others) : '';
   $('#viewersStatus').textContent = others ? '명이 함께 보고 있어요' : '지금은 나 혼자 보고 있어요';
-  const rows = who.people.map((p) => whoRow({ name: p.name, hue: hueOf(p.uid) }));
-  if (who.anonymous) {
-    rows.push(whoRow({
-      name: who.anonymous === 1 ? '익명' : `익명 ${who.anonymous}명`,
-      sub: '닉네임을 정하지 않은 방문자',
-      anon: true,
-    }));
-  }
-  $('#viewerList').replaceChildren(...rows);
 }
 
 function onPresence(who) {
@@ -564,7 +521,7 @@ function onPresence(who) {
   $('#liveChip').hidden = who === null;
   if (who) {
     $('#liveCount').textContent = String(who.total);
-    $('#liveChip').setAttribute('aria-label', `나를 제외하고 지금 ${who.total}명이 보고 있어요. 누가 보는지 보기`);
+    $('#liveChip').setAttribute('aria-label', `나를 제외하고 지금 ${who.total}명이 보고 있어요. 접속 수 보기`);
   }
   if (viewers.isOpen) renderViewers();
 }
@@ -578,30 +535,7 @@ $('#accountBtn').addEventListener('click', () => {
   if (!state.store) return;
   const theme = pref(PREF_THEME) ?? 'auto';
   for (const r of document.querySelectorAll('input[name="theme"]')) r.checked = r.value === theme;
-  $('#nickInput').value = state.store.user?.nickname ?? '';
-  $('#nickInput').placeholder = '익명';
   profile.open();
-});
-
-$('#nickForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const input = $('#nickInput');
-  const name = input.value.trim();
-  if (name === (state.store.user?.nickname ?? '')) {
-    profile.close();
-    return;
-  }
-  const btn = $('#nickSave');
-  btn.disabled = true;
-  try {
-    await state.store.setNickname(name);
-    profile.close();
-    toast(name ? `이제 '${name}'(으)로 글을 남겨요.` : '이제 익명으로 글을 남겨요.');
-  } catch (err) {
-    toast(errorMessage(err, '닉네임을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.'), { tone: 'error' });
-  } finally {
-    btn.disabled = false;
-  }
 });
 
 $('#profile').addEventListener('change', (e) => {

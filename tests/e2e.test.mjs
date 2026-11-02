@@ -44,15 +44,6 @@ async function visitor(options = {}, { clock } = {}) {
 // 로그인은 없어요. 화면이 익명 계정을 만들 때까지 기다려요.
 const canWrite = (page) => page.waitForSelector('body.can-write', { state: 'attached', timeout: 15_000 });
 
-// 설정에서 닉네임을 정해요.
-async function setNickname(page, name) {
-  await page.click('#accountBtn');
-  await page.waitForSelector('#profile[open]');
-  await page.fill('#nickInput', name);
-  await page.click('#nickSave');
-  await page.waitForFunction(() => !document.querySelector('#profile').open, null, { timeout: 15_000 });
-}
-
 // 다른 사람이 지난 날에 남긴 것처럼 글을 직접 넣어요. (보안 규칙을 끄고 넣어요)
 async function seed(path, data) {
   await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), path), data));
@@ -98,14 +89,14 @@ after(async () => {
 test('로그인 없이 보드를 보고, 바로 익명으로 글상자를 열 수 있어요', async () => {
   assert.equal(await guest.isVisible('#boardTip .board-tip__mouse'), true);
   assert.match(await guest.textContent('#boardMessageTitle'), /오늘의 첫 글/);
-  assert.equal(await guest.getAttribute('#accountBtn', 'aria-label'), '설정: 닉네임과 화면');
+  assert.equal(await guest.getAttribute('#accountBtn', 'aria-label'), '화면 설정');
   assert.equal(await guest.locator('#signin, #googleSignIn, #inAppBar, #signOutBtn').count(), 0, '로그인 화면은 없어요');
   assert.doesNotMatch(await guest.textContent('body'), /로그인|Google/);
   assert.equal(await guest.isHidden('#adminChip'), true);
   assert.equal(await guest.locator('#minimap, .minimap, .zoombar, #zoomLabel, #infoBtn').count(), 0, '미니맵과 확대 비율 표시는 없어요');
   await guest.click('#writeBtn');
   await guest.waitForSelector('.note.is-draft textarea', { timeout: 15_000 });
-  assert.equal(await guest.textContent('.is-draft .draft__name'), '익명');
+  assert.equal(await guest.locator('.draft__name, .note__sign').count(), 0);
   assert.equal(await guest.evaluate(() => document.querySelector('dialog[open]')), null, '따로 뜨는 창이 없어요');
   await guest.keyboard.press('Escape');
   await guest.waitForSelector('.is-draft', { state: 'detached' });
@@ -115,11 +106,11 @@ test('로그인 없이 보드를 보고, 바로 익명으로 글상자를 열 �
   await guest.keyboard.press('Escape');
 });
 
-test('글상자는 보드 위에 바로 열리고, 닉네임을 정하면 그 이름으로 남아요', async () => {
+test('글상자는 보드 위에 바로 열리고 이름 없이 내용만 남아요', async () => {
   await alice.evaluate(() => localStorage.setItem('guestnote:author', '예전에 적은 별명'));
   await alice.click('#writeBtn');
   await alice.waitForSelector('.note.is-draft textarea', { timeout: 15_000 });
-  assert.equal(await alice.textContent('.is-draft .draft__name'), '익명', '예전에 적어 둔 별명은 쓰지 않아요');
+  assert.equal(await alice.locator('.draft__name, .note__sign').count(), 0);
   assert.equal(await alice.locator('.is-draft input, .is-draft [contenteditable=true], .note__dash').count(), 0);
   assert.equal(await alice.isHidden('#boardTip'), true);
   assert.equal(await alice.evaluate(() => document.activeElement?.classList.contains('draft__text')), true, '바로 쓸 수 있게 커서가 있어요');
@@ -130,12 +121,10 @@ test('글상자는 보드 위에 바로 열리고, 닉네임을 정하면 그 �
   assert.equal(await dockMode(alice), 'today');
   assert.equal(await alice.isVisible('#boardTip'), true);
 
-  await setNickname(alice, '앨리스');
   await alice.click('#writeBtn');
   await alice.waitForSelector('.note.is-draft textarea');
-  assert.equal(await alice.textContent('.is-draft .draft__name'), '앨리스');
+  assert.equal(await alice.locator('.draft__name, .note__sign').count(), 0);
   await alice.keyboard.press('Escape');
-  await setNickname(bob, '밥');
   assert.ok(await uidOf(alice));
   assert.notEqual(await uidOf(alice), await uidOf(bob), '브라우저마다 다른 익명 계정이에요');
 });
@@ -151,7 +140,7 @@ test('빈 곳을 두 번 눌러 쓰면 그 자리에 붙고, 다른 사람 보�
   await guest.waitForSelector('.note >> text=실시간으로 보이나요?', { timeout: 10_000 });
   assert.equal(await alice.locator('.note.is-movable').count(), 1);
   assert.equal(await bob.locator('.note.is-movable').count(), 0, '남의 글은 옮길 수 없어요');
-  assert.equal(await mine.locator('.note__foot').textContent(), '앨리스');
+  assert.equal(await mine.locator('.note__foot').count(), 0);
   assert.equal(await guest.isVisible('#boardTip'), true, '글이 있어도 안내가 보여요');
 });
 
@@ -204,14 +193,14 @@ test('키보드 화살표로도 내 글을 옮길 수 있어요', async () => {
   await waitForTranslate(bob, '실시간으로 보이나요?', `${x0 + 16}px ${y0 + 64}px`);
 });
 
-test('남의 글은 끌어도 움직이지 않고, 고르면 쓴 사람만 보이고 고치거나 지울 수 없어요', async () => {
+test('남의 글은 끌어도 움직이지 않고, 이름 없이 보이며 고치거나 지울 수 없어요', async () => {
   const theirs = bob.locator('.note', { hasText: '실시간으로 보이나요?' });
   const before = await translateOf(theirs);
   await dragBy(bob, theirs, 150, 90);
   assert.equal(await translateOf(theirs), before);
   await theirs.click();
   await bob.waitForSelector('#dock[data-mode="pick"]');
-  assert.equal(await bob.textContent('#pickAuthor'), '앨리스');
+  assert.equal(await bob.locator('#pickAuthor, .note__sign').count(), 0);
   assert.equal(await bob.isHidden('#pickEdit'), true);
   assert.equal(await bob.isHidden('#pickDelete'), true);
   assert.equal(await bob.isHidden('#pickMine'), true);
@@ -220,7 +209,7 @@ test('남의 글은 끌어도 움직이지 않고, 고르면 쓴 사람만 보�
   await bob.waitForSelector('.is-draft textarea');
   assert.equal(await bob.inputValue('.is-draft textarea'), '', '남의 글은 고칠 수 없어요');
   assert.equal(await bob.locator('.note.is-held').count(), 0);
-  assert.equal(await bob.textContent('.is-draft .draft__name'), '밥');
+  assert.equal(await bob.locator('.draft__name, .note__sign').count(), 0);
   await bob.keyboard.press('Escape');
   await bob.waitForSelector('.is-draft', { state: 'detached' });
   await bob.waitForSelector('#dock[data-mode="today"]');
@@ -334,10 +323,8 @@ test('내 글은 두 번 눌러 그 자리에서 고치고, 골라서 지울 수
   assert.equal(await alice.inputValue('.is-draft textarea'), '오타가 있는 글');
   assert.equal(await alice.inputValue('#writeBar input[name=style]:checked'), 'memo');
   assert.equal(await alice.locator('.note.is-held').count(), 1, '고치는 동안 원래 글은 감춰요');
-  assert.equal(await alice.textContent('.is-draft .draft__name'), '앨리스');
+  assert.equal(await alice.locator('.draft__name, .note__sign').count(), 0);
   assert.equal(await alice.locator('.is-draft input, .note__dash').count(), 0);
-  // 표시 문구를 직접 변조해도 저장할 작성자는 처음 값 그대로예요.
-  await alice.locator('.is-draft .draft__name').evaluate((el) => { el.textContent = '다른 이름'; });
   await alice.fill('.is-draft textarea', '고친 글');
   await alice.check('#writeBar input[name=style][value=text]', { force: true });
   await alice.click('#writeSubmit');
@@ -345,7 +332,7 @@ test('내 글은 두 번 눌러 그 자리에서 고치고, 골라서 지울 수
   const fixed = bob.locator('.note', { hasText: '고친 글' });
   await fixed.waitFor({ timeout: 10_000 });
   assert.equal(await fixed.evaluate((el) => el.classList.contains('note--text')), true);
-  assert.equal(await fixed.locator('.note__sign').textContent(), '앨리스');
+  assert.equal(await fixed.locator('.note__sign').count(), 0);
 
   await alice.locator('.note', { hasText: '고친 글' }).click();
   assert.equal(await alice.isVisible('#pickMine'), true);
@@ -405,7 +392,7 @@ test('지난 날짜는 달력과 주소로 찾아가서 읽기만 할 수 있어
   await alice.mouse.dblclick(200, 600);
   await alice.waitForSelector('.toast >> text=지난 보드는 읽기만');
   assert.equal(await alice.locator('.is-draft').count(), 0);
-  await alice.locator('.note', { hasText: `${yesterday}의 글` }).filter({ hasText: '앨리스' }).click();
+  await alice.locator('.note[data-id="y2"]').click();
   await alice.waitForSelector('#dock[data-mode="pick"]');
   assert.equal(await alice.isVisible('#pickMine'), true);
   assert.equal(await alice.isHidden('#pickEdit'), true);
@@ -417,7 +404,7 @@ test('지난 날짜는 달력과 주소로 찾아가서 읽기만 할 수 있어
   await ready(bob);
   await bob.waitForFunction(() => document.querySelectorAll('.note').length === 2);
   assert.equal(await bob.locator('.note.is-movable').count(), 0);
-  await bob.locator('.note', { hasText: '지우' }).click();
+  await bob.locator('.note[data-id="y1"]').click();
   await bob.waitForSelector('#dock[data-mode="pick"]');
   assert.equal(await bob.isHidden('#pickEdit'), true);
   assert.equal(await bob.textContent('#pickDelete'), '관리자로 지우기');
@@ -443,46 +430,28 @@ test('지난 날짜는 달력과 주소로 찾아가서 읽기만 할 수 있어
   assert.equal(await alice.textContent('#dateBadge'), '오늘');
 });
 
-test('설정에서 닉네임을 바꾸면 새 글부터 그 이름으로 남고, 비우면 익명으로 돌아가요', async () => {
-  const before = await alice.locator('.note.is-mine').first().locator('.note__sign').textContent();
-  await alice.click('#accountBtn');
-  await alice.waitForSelector('#profile[open]');
-  assert.equal(await alice.inputValue('#nickInput'), '앨리스');
-  assert.equal(await alice.getAttribute('#nickInput', 'placeholder'), '익명');
-  await alice.fill('#nickInput', '  별빛  ');
-  await alice.press('#nickInput', 'Enter');
-  await alice.waitForFunction(() => !document.querySelector('#profile').open);
-  await write(alice, { text: '닉네임으로 남긴 글' });
-  const nicked = bob.locator('.note', { hasText: '닉네임으로 남긴 글' });
-  await nicked.waitFor({ timeout: 10_000 });
-  assert.equal(await nicked.locator('.note__sign').textContent(), '별빛');
-  assert.equal(await alice.locator('.note.is-mine').first().locator('.note__sign').textContent(), before, '이미 쓴 글의 이름은 그대로예요');
-  // 새로고침해도 같은 익명 계정이고, 닉네임이 남아 있어요.
+test('예전에 닉네임을 정한 계정도 이름을 표시하지 않고 글을 저장해요', async () => {
   const uid = await uidOf(alice);
+  await seed(`profiles/${uid}`, { name: '예전닉네임', updatedAt: Timestamp.now() });
   await alice.reload();
   await ready(alice);
   await canWrite(alice);
   assert.equal(await uidOf(alice), uid);
-  await alice.click('#accountBtn');
-  assert.equal(await alice.inputValue('#nickInput'), '별빛');
-  await alice.fill('#nickInput', '');
-  await alice.click('#nickSave');
-  await alice.waitForFunction(() => !document.querySelector('#profile').open);
-  assert.match(await alice.textContent('#toasts'), /익명으로 글을 남겨요/);
-  await alice.click('#writeBtn');
-  await alice.waitForSelector('.note.is-draft textarea');
-  assert.equal(await alice.textContent('.is-draft .draft__name'), '익명');
-  await alice.keyboard.press('Escape');
-  await setNickname(alice, '앨리스');
+  await write(alice, { text: '이름 없이 내용만 남긴 글' });
+  const note = bob.locator('.note', { hasText: '이름 없이 내용만 남긴 글' });
+  await note.waitFor({ timeout: 10_000 });
+  assert.equal(await note.locator('.note__sign').count(), 0);
+  assert.doesNotMatch(await note.getAttribute('aria-label'), /예전닉네임/);
+  assert.doesNotMatch(await bob.textContent('body'), /예전닉네임/);
 });
 
-test('설정에는 닉네임과 화면만 있어요', async () => {
+test('설정에는 화면만 있고 이름과 ID 입력은 없어요', async () => {
   await alice.waitForSelector('.note.is-movable');
   await alice.click('#accountBtn');
   await alice.waitForSelector('#profile[open]');
   const controls = await alice.$$eval('#profile button, #profile input', (els) => els.map((el) => el.id || el.name || el.getAttribute('aria-label')));
-  assert.deepEqual(controls, ['닫기', 'nickInput', 'nickSave', 'theme', 'theme', 'theme']);
-  assert.doesNotMatch(await alice.textContent('#profile'), /로그아웃|Google|이메일|내 ID|관리자 등록/);
+  assert.deepEqual(controls, ['닫기', 'theme', 'theme', 'theme']);
+  assert.doesNotMatch(await alice.textContent('#profile'), /로그아웃|Google|이메일|내 ID|관리자 등록|닉네임/);
   await alice.check('#profile input[name=theme][value=dark]', { force: true });
   assert.equal(await alice.evaluate(() => document.documentElement.dataset.theme), 'dark');
   await alice.check('#profile input[name=theme][value=auto]', { force: true });
@@ -521,7 +490,7 @@ test('휴대폰에서도 로그인 없이 보드에 바로 글을 쓸 수 있어
   assert.ok(tip.x >= 0 && tip.x + tip.width <= phone.viewportSize().width);
   await phone.tap('#writeBtn');
   await phone.waitForSelector('.is-draft textarea', { timeout: 15_000 });
-  assert.equal(await phone.textContent('.is-draft .draft__name'), '익명');
+  assert.equal(await phone.locator('.draft__name, .note__sign').count(), 0);
   assert.equal(await phone.isVisible('#writeSubmit'), true);
   await phone.fill('.is-draft textarea', '폰에서 남겨요');
   await phone.tap('#writeSubmit');
@@ -585,55 +554,48 @@ test('헤더에 나를 제외한 사람 수가 나오고, 창을 닫으면 줄�
   assert.match(await guest.getAttribute('#liveChip', 'aria-label'), /나를 제외하고 지금 \d+명이 보고 있어요/);
 });
 
-test('지금 보는 사람을 누르면 닉네임을 정한 사람은 이름, 나머지는 익명으로 보여요', async () => {
-  const nameless = await visitor();
-  const carol = await visitor();
-  await setNickname(carol, '캐럴');
-  await guest.waitForSelector('#liveChip:not([hidden])');
-  const names = (page) => page.$$eval('#viewerList .who__name', (els) => els.map((el) => el.textContent));
-  const listed = (page, name) => page.evaluate((n) => [...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === n), name);
+test('접속 정보는 이름 없이 수만 표시하고 탭을 닫아도 같은 계정의 다른 탭은 남아요', async () => {
+  await guest.waitForTimeout(1000);
+  const count = () => guest.evaluate(() => Number(document.querySelector('#liveCount').textContent));
+  const before = await count();
+  const first = await visitor();
+  await canWrite(first);
+  await guest.waitForFunction(n => Number(document.querySelector('#liveCount').textContent) === n + 1, before);
+  const second = await first.context().newPage();
+  await second.goto(app.base);
+  await ready(second);
+  await canWrite(second);
+  assert.equal(await uidOf(second), await uidOf(first));
+  await guest.waitForTimeout(500);
+  assert.equal(await count(), before + 1, '같은 계정의 두 탭은 한 사람으로 세요');
+  await first.close({ runBeforeUnload: true });
+  await guest.waitForTimeout(500);
+  assert.equal(await count(), before + 1, '한 탭이 닫혀도 다른 탭은 남아요');
+  await second.close({ runBeforeUnload: true });
+  await guest.waitForFunction(n => Number(document.querySelector('#liveCount').textContent) === n, before, { timeout: 5000 });
+  await first.context().close();
   await guest.click('#liveChip');
-  await guest.waitForSelector('#viewers[open]');
-  // 열어 둔 목록에 바로 나타나요. (다시 남기는 주기 30초보다 훨씬 빨리)
-  await guest.waitForFunction(() => [...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === '캐럴'), null, { timeout: 5_000 });
-  const seen = await names(guest);
-  const anon = seen.find((t) => t.startsWith('익명'));
-  assert.ok(anon, `익명 줄이 있어요: ${JSON.stringify(seen)}`);
-  // 목록과 헤더 모두 나를 빼고 같은 수를 보여 줘요.
-  assert.equal(Number(await guest.textContent('#viewersCount')), Number(await guest.textContent('#liveCount')));
-  assert.equal(await guest.textContent('#viewersStatus'), '명이 함께 보고 있어요');
-  // 열어 둔 채로 캐럴이 나가면 바로 빠져요.
-  const leaving = await visitor();
-  await setNickname(leaving, '데이브');
-  await guest.waitForFunction(() => [...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === '데이브'), null, { timeout: 5_000 });
-  await leaving.close({ runBeforeUnload: true });
-  await guest.waitForFunction(() => ![...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === '데이브'), null, { timeout: 5_000 });
-  assert.equal(await listed(guest, '캐럴'), true);
+  assert.equal(await guest.locator('#viewerList, .who__name').count(), 0);
+  assert.equal(Number(await guest.textContent('#viewersCount')), await count());
   await guest.keyboard.press('Escape');
-  // 로그인한 사람에게도 자기 이름은 안 보여요.
-  await carol.click('#liveChip');
-  await carol.waitForSelector('#viewers[open]');
-  await carol.waitForFunction(() => document.querySelector('#viewerList .who'));
-  assert.equal((await names(carol)).includes('캐럴'), false);
-  // 다른 탭으로 가면 바로 빠지고, 돌아오면 다시 나타나요.
-  await carol.keyboard.press('Escape');
-  await guest.click('#liveChip');
-  await guest.waitForFunction(() => document.querySelector('#viewerList .who'));
-  await carol.evaluate(() => {
+});
+
+test('다른 앱으로 가면 바로 빠지고 돌아오면 다시 세요', async () => {
+  const extra = await visitor();
+  await canWrite(extra);
+  await guest.waitForTimeout(500);
+  const before = await guest.evaluate(() => Number(document.querySelector('#liveCount').textContent));
+  await extra.evaluate(() => {
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  await guest.waitForFunction(() => ![...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === '캐럴'), null, { timeout: 5_000 });
-  await carol.evaluate(() => {
+  await guest.waitForFunction(n => Number(document.querySelector('#liveCount').textContent) === n - 1, before, { timeout: 5000 });
+  await extra.evaluate(() => {
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  await guest.waitForFunction(() => [...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === '캐럴'), null, { timeout: 5_000 });
-  await guest.keyboard.press('Escape');
-  await carol.close({ runBeforeUnload: true });
-  await carol.context().close();
-  await nameless.close({ runBeforeUnload: true });
-  await nameless.context().close();
+  await guest.waitForFunction(n => Number(document.querySelector('#liveCount').textContent) === n, before, { timeout: 5000 });
+  await extra.context().close();
 });
 
 test('공유 미리보기 정보와 이미지가 있어요', async () => {

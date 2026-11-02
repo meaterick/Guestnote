@@ -7,8 +7,6 @@
 
 :root {
   color-scheme: light;
-  --who-bg-l: 86%;
-  --who-fg-l: 30%;
   --ink: #1e2440;
   --ink-2: rgb(30 36 64 / 0.74);
   --ink-3: rgb(30 36 64 / 0.56);
@@ -56,8 +54,6 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --who-bg-l: 30%;
-    --who-fg-l: 88%;
     --ink: #eef0ff;
     --ink-2: rgb(238 240 255 / 0.78);
     --ink-3: rgb(238 240 255 / 0.6);
@@ -99,8 +95,6 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --who-bg-l: 30%;
-  --who-fg-l: 88%;
   --ink: #eef0ff;
   --ink-2: rgb(238 240 255 / 0.78);
   --ink-3: rgb(238 240 255 / 0.6);
@@ -356,36 +350,6 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
 .viewers { width: 100%; }
 .viewers__status { display: flex; align-items: center; gap: 8px; margin: -4px 0 14px; font-size: 14px; color: var(--ink-2); }
 .viewers__status b { font-size: 15px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; margin-right: -6px; }
-.viewers__list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0 -8px;
-  padding: 0;
-  list-style: none;
-  max-height: min(52dvh, 420px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-.who { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 8px; border-radius: 14px; }
-.who + .who { border-top: 1px solid var(--line); border-radius: 0; }
-.who__avatar {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: hsl(var(--hue, 220) 70% var(--who-bg-l));
-  color: hsl(var(--hue, 220) 45% var(--who-fg-l));
-  font-size: 15px;
-  font-weight: 700;
-}
-.who__avatar svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
-.who__text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.who__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15.5px; color: var(--ink); }
-.who__sub { font-size: 12.5px; color: var(--ink-3); }
-.who--anon .who__avatar { background: var(--soft-fill); color: var(--ink-2); border: 1px dashed var(--line); }
 .live-dot {
   width: 8px;
   height: 8px;
@@ -521,34 +485,6 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
   overflow-wrap: anywhere;
 }
 
-.note__foot {
-  position: relative;
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin-top: 4px;
-  color: var(--ink-3);
-  font-family: var(--font-hand);
-  font-size: 22px;
-  line-height: 1.1;
-}
-.note__sign {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* 내 글에는 이름 옆에 작은 점이 붙어요. */
-.note.is-mine:not(.is-draft) .note__foot::after {
-  content: '';
-  flex: none;
-  align-self: center;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
 /* 글자: 보드에 바로 쓴 글씨. 색을 고르면 잉크 색이 바뀌어요. */
 .note--text {
   width: max-content;
@@ -600,7 +536,6 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
   line-height: 36px;
   background-image: repeating-linear-gradient(to bottom, transparent 0 35px, var(--rule) 35px 36px);
 }
-.note--memo .note__foot { justify-content: flex-end; }
 
 /* ---------- 보드에 바로 쓰는 글상자 ---------- */
 .drafts { position: absolute; inset: 0; pointer-events: none; }
@@ -737,16 +672,6 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
   border-radius: 999px;
 }
 .pick__who { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin: 0; }
-.pick__author {
-  min-width: 0;
-  max-width: 10em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-hand);
-  font-size: 25px;
-  line-height: 1;
-}
 .pick__time { flex: none; font-size: 13px; color: var(--ink-3); white-space: nowrap; }
 .pick__mine {
   flex: none;
@@ -986,20 +911,8 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
   margin: calc(env(safe-area-inset-top) + 76px) 12px auto auto;
 }
 .modal--menu::backdrop { background: rgb(16 20 44 / 0.12); -webkit-backdrop-filter: none; backdrop-filter: none; }
-.nick { margin: 0 0 16px; }
-.nick__label { margin: 0 0 6px; font-size: 13.5px; color: var(--ink-2); }
-.nick__row { display: flex; gap: 8px; }
-.nick__input {
-  flex: 1;
-  min-width: 0;
-  padding: 9px 14px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--field-fill);
-  font-size: 16px;
-}
-.nick__input:focus { outline: 3px solid color-mix(in oklch, var(--focus) 40%, transparent); outline-offset: 0; border-color: var(--focus); }
-.nick__hint { margin: 6px 4px 0; font-size: 12.5px; color: var(--ink-3); }
+.profile__label { margin: 0 0 6px; font-size: 13.5px; color: var(--ink-2); }
+
 
 /* ---------- 사진 크게 보기 ---------- */
 .viewer {
@@ -1081,7 +994,6 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
   .cta { padding: 13px 22px 13px 18px; font-size: 16px; }
   .dock__past { font-size: 14px; padding-left: 14px; }
   .pick { justify-content: space-between; gap: 8px; width: calc(100vw - 16px); padding-left: 16px; }
-  .pick__author { max-width: 7em; font-size: 23px; }
   .pick__time { display: none; }
   .tools {
     flex-wrap: wrap;

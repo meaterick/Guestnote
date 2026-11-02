@@ -3,7 +3,7 @@
 // 아래 도구 막대에서 모양(글자/메모장)과 색을 고르고, 사진을 넣은 뒤 '올리기'를 눌러요.
 // 사진은 버튼, 끌어 놓기, 붙여 넣기로 넣을 수 있고, 올리기 전에 브라우저에서 줄여요.
 import { $, h, toast, errorMessage } from './ui.js';
-import { STYLES, TINTS, LIMITS, photoRatio, accountAuthor } from './notes.js';
+import { STYLES, TINTS, LIMITS, photoRatio } from './notes.js';
 import { compressImage, formatBytes, isSafeImageUrl, ImageError } from './image.js';
 
 const randomTilt = () => Math.round((Math.random() * 5 - 2.5) * 10) / 10 || 0.5;
@@ -49,9 +49,8 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     unphoto.innerHTML = '<svg aria-hidden="true"><use href="#i-close"/></svg>';
     const fig = h('figure', { class: 'note__photo draft__photo', hidden: true },
       img, h('span', { class: 'draft__busy', text: '사진을 줄이는 중…' }), unphoto);
-    const name = h('span', { class: 'note__sign draft__name', 'aria-label': '작성자' });
     const el = h('div', { class: 'note is-draft', role: 'group', 'aria-label': '쓰는 중인 글' },
-      fig, grow, h('footer', { class: 'note__foot' }, name));
+      fig, grow);
 
     text.addEventListener('input', () => {
       grow.dataset.value = text.value;
@@ -73,7 +72,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
       }
     });
     img.addEventListener('load', () => d && reveal());
-    return { el, text, grow, fig, img, name };
+    return { el, text, grow, fig, img };
   }
 
   // ---------- 자리와 보이기 ----------
@@ -230,10 +229,10 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
 
   // ---------- 시작, 올리기, 그만두기 ----------
   // at: 글상자를 열 보드 좌표 (없으면 화면 가운데 근처 빈자리)
-  // note: 고칠 내 글 / file: 처음부터 넣을 사진 / defaultAuthor: 새 글의 작성자 이름 (닉네임 또는 '익명')
+  // note: 고칠 내 글 / file: 처음부터 넣을 사진
   // deferFocus: 손가락으로 두 번 눌러 열 때. 커서는 손가락을 떼는 순간(focusPending)에 둬요.
   // photo: 고칠 글의 사진으로 보여 줄 주소 (움직이는 GIF를 불러왔으면 그 주소)
-  function start({ at = null, note = null, file = null, defaultAuthor = '', deferFocus = false, photo = null } = {}) {
+  function start({ at = null, note = null, file = null, deferFocus = false, photo = null } = {}) {
     if (d) {
       // 이미 쓰는 중이면 그 글상자를 누른 곳으로 옮기고 이어서 써요.
       if (at && !d.busy) {
@@ -257,8 +256,6 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     setTint(note?.color ?? 'clear');
     d.text.value = note?.text ?? '';
     d.grow.dataset.value = d.text.value;
-    d.author = note ? note.author : accountAuthor(defaultAuthor);
-    d.name.textContent = d.author;
     if (note && isSafeImageUrl(note.img)) showPhoto(isSafeImageUrl(photo) ? photo : note.img, photoRatio(note));
     layer.append(d.el);
     if (note) {
@@ -304,7 +301,6 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
       return;
     }
     const text = d.text.value.replace(/\s+$/, '').slice(0, LIMITS.text);
-    const author = d.author;
     if (!text.trim() && !hasPhoto()) {
       toast('내용을 적거나 사진을 넣어 주세요.');
       focus();
@@ -312,7 +308,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     }
     const { w, h: ht } = rect();
     const pos = board.clampPos(d.x, d.y, w, ht);
-    const data = { type: d.style, author, text: text.trim() ? text : '', color: d.tint, rot: d.rot };
+    const data = { type: d.style, text: text.trim() ? text : '', color: d.tint, rot: d.rot };
     const draft = d;
     if (draft.mode === 'create') {
       // 저장되는 동안 보드에 먼저 나타나는 같은 글은 숨겨 두고, 글상자를 그대로 보여 줘요.
