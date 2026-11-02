@@ -8,7 +8,6 @@ import { createWriter } from './writer.js';
 import { createSelection } from './selection.js';
 import { createCalendar } from './calendar.js';
 import { isSafeImageUrl } from './image.js';
-import { setupTravel } from './travel-world.js';
 
 const config = {
   siteTitle: 'Guestnote',
@@ -565,8 +564,6 @@ setBoardMessage('loading');
 board.fit({ animate: false });
 checkDay();
 
-setupTravel();
-
 try {
   state.store = await createStore(config);
 } catch (err) {
@@ -602,3 +599,4 @@ if (state.store) {
   openDay(start);
 }
 document.body.classList.add('is-ready');
+
