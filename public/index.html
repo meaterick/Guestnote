@@ -26,6 +26,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Nanum+Pen+Script&display=swap">
   <link rel="stylesheet" href="assets/app.css">
+  <link rel="stylesheet" href="assets/travel.css">
   <script type="module" src="assets/js/main.js"></script>
 </head>
 <body>
@@ -95,6 +96,7 @@
   <!-- 아래 막대: 오늘은 글쓰기 버튼, 지난 날은 안내, 글을 고르면 그 글의 정보, 쓰는 중에는 글쓰기 도구 -->
   <div class="dock" id="dock" data-mode="today">
     <button class="cta" id="writeBtn" type="button"><svg><use href="#i-pen"/></svg><span>글 남기기</span></button>
+    <button class="trip-launch glass" id="tripLaunch" type="button" aria-haspopup="dialog"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m16 8-2.5 5.5L8 16l2.5-5.5Z"/></svg><span>랜덤 여행</span></button>
 
     <p class="dock__past glass">
       <span>지난 보드는 읽기만 할 수 있어요.</span>
@@ -185,6 +187,46 @@
         <label class="seg__item"><input type="radio" name="theme" value="light"><span>밝게</span></label>
         <label class="seg__item"><input type="radio" name="theme" value="dark"><span>어둡게</span></label>
       </div>
+    </section>
+  </dialog>
+  <dialog class="modal modal--travel" id="travel" aria-labelledby="tripTitle" data-state="loading">
+    <section class="trip-panel">
+      <header class="trip-header">
+        <div><p class="trip-eyebrow">A LITTLE DETOUR</p><h2 id="tripTitle">어디든, 떠나볼까.</h2><p class="trip-subtitle">계획 없이 고르는, 대한민국의 한 점.</p></div>
+        <button class="icon-btn trip-close" type="button" data-close aria-label="여행 지도 닫기"><svg><use href="#i-close"/></svg></button>
+      </header>
+      <div class="trip-layout">
+        <div class="trip-map-wrap">
+          <span class="trip-map-caption">SOUTH KOREA <i></i> LAND ONLY</span>
+          <svg id="tripMap" viewBox="0 0 560 560" role="img" aria-label="제주도·울릉도·독도를 포함한 대한민국 전국 지도">
+            <defs><pattern id="tripGrid" width="35" height="35" patternUnits="userSpaceOnUse"><path d="M35 0H0V35" fill="none" stroke="currentColor" stroke-width=".5"/></pattern></defs>
+            <rect width="560" height="560" fill="url(#tripGrid)" class="trip-grid"/>
+            <g id="tripCamera" class="trip-camera">
+              <g id="tripLand"></g><g id="tripLabels" class="trip-labels" aria-hidden="true"></g>
+              <g id="tripTrail" class="trip-trail" aria-hidden="true"></g>
+              <g id="tripSparks" aria-hidden="true"></g>
+              <g id="tripMarker" class="trip-marker" aria-hidden="true">
+                <circle class="trip-ring trip-ring--outer" r="28"/><circle class="trip-ring" r="15"/>
+                <path class="trip-cross" d="M-38 0H-22M22 0H38M0-38V-22M0 22V38"/>
+                <g class="trip-pin"><path d="M0 0s-12-13-12-21a12 12 0 0 1 24 0C12-13 0 0 0 0Z"/><circle cy="-21" r="4"/></g>
+                <circle class="trip-dot" r="3"/>
+              </g>
+            </g>
+            <g class="trip-north" transform="translate(510 60)" aria-hidden="true"><text y="-18" text-anchor="middle">N</text><path d="m0-8-5 18 5-4 5 4Z"/></g>
+          </svg>
+          <div class="trip-scan" aria-hidden="true"></div>
+          <button class="trip-overview" id="tripOverview" type="button" hidden>↙ 전국 보기</button>
+          <span class="trip-map-foot">우연이 데려다주는 곳으로.</span>
+        </div>
+        <div class="trip-info">
+          <span class="trip-result-label">YOUR NEXT DESTINATION</span>
+          <div class="trip-announcement" aria-live="polite" aria-atomic="true"><p class="trip-status" id="tripStatus">전국 지도를 펼치는 중…</p><h3 id="tripName">어디로 가게 될까?</h3><p class="trip-coords" id="tripCoords">북쪽에서 남쪽까지, 섬에서 내륙까지</p></div>
+          <div class="trip-links" id="tripLinks" hidden><a id="tripExternal" target="_blank" rel="noopener noreferrer">지도에서 보기 ↗</a><button id="tripCopy" type="button">좌표 복사</button></div>
+          <div class="trip-action"><button id="tripDraw" class="trip-draw" type="button" disabled>여행지 뽑기 ↗</button><p>전국의 육지에서 무작위로 골라요.<br>산이나 작은 섬도 목적지가 될 수 있어요.</p></div>
+          <p class="trip-note">지도의 경계는 간략화되어 있어요. 실제 접근 가능한 곳인지는 상세 지도에서 확인해 주세요.</p>
+        </div>
+      </div>
+      <footer class="trip-credit">지도: 통계청 SGIS, 2018 · <a href="https://github.com/southkorea/southkorea-maps/tree/60c8c0cf0016381d80004d6b125760d6c5cb0605/kostat/2018/json" target="_blank" rel="noopener noreferrer">southkorea-maps</a> · 공공누리 제1유형 · 경계 단순화</footer>
     </section>
   </dialog>
 </body>

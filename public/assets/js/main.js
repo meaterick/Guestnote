@@ -8,6 +8,7 @@ import { createWriter } from './writer.js';
 import { createSelection } from './selection.js';
 import { createCalendar } from './calendar.js';
 import { isSafeImageUrl } from './image.js';
+import { setupTravel } from './travel.js';
 
 const config = {
   siteTitle: 'Guestnote',
@@ -563,6 +564,8 @@ renderHeader();
 setBoardMessage('loading');
 board.fit({ animate: false });
 checkDay();
+
+setupTravel();
 
 try {
   state.store = await createStore(config);
