@@ -174,7 +174,7 @@
     </section>
   </dialog>
 
-  <!-- 설정: 닉네임, 화면, 내 ID -->
+  <!-- 설정: 닉네임, 화면 -->
   <dialog class="modal modal--menu" id="profile" aria-labelledby="profileTitle">
     <section class="panel glass profile">
       <header class="panel__head">
@@ -195,11 +195,6 @@
         <label class="seg__item"><input type="radio" name="theme" value="light"><span>밝게</span></label>
         <label class="seg__item"><input type="radio" name="theme" value="dark"><span>어둡게</span></label>
       </div>
-      <details class="profile__id">
-        <summary>내 ID (관리자 등록용)</summary>
-        <p>이 브라우저에 붙은 익명 ID예요. 관리자로 등록하려면 Firebase 콘솔의 <code>admins</code> 컬렉션에 이 ID로 빈 문서를 만들어요. 사이트 데이터를 지우면 새 ID가 생겨요.</p>
-        <div class="profile__id-row"><code id="myUid"></code><button class="btn btn--small" id="copyUid" type="button">복사</button></div>
-      </details>
     </section>
   </dialog>
 </body>

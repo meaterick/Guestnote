@@ -986,11 +986,6 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
   margin: calc(env(safe-area-inset-top) + 76px) 12px auto auto;
 }
 .modal--menu::backdrop { background: rgb(16 20 44 / 0.12); -webkit-backdrop-filter: none; backdrop-filter: none; }
-.profile__id { margin-top: 16px; font-size: 13.5px; color: var(--ink-2); }
-.profile__id summary { cursor: pointer; }
-.profile__id p { margin: 8px 0; line-height: 1.6; }
-.profile__id-row { display: flex; align-items: center; gap: 8px; }
-.profile__id-row code { flex: 1; min-width: 0; overflow-wrap: anywhere; padding: 6px 10px; border-radius: 10px; background: var(--soft-fill); font-size: 12.5px; user-select: all; }
 .nick { margin: 0 0 16px; }
 .nick__label { margin: 0 0 6px; font-size: 13.5px; color: var(--ink-2); }
 .nick__row { display: flex; gap: 8px; }

@@ -498,7 +498,7 @@ if (window.visualViewport) {
 // 알림은 아래 막대 바로 위에 떠요. 막대 높이가 바뀌면 같이 올라가요.
 new ResizeObserver(() => root.style.setProperty('--dock-h', `${dock.offsetHeight}px`)).observe(dock);
 
-// ---------- 설정: 닉네임, 화면, 내 ID ----------
+// ---------- 설정: 닉네임, 화면 ----------
 const profile = setupDialog($('#profile'));
 
 // ---------- 지금 보는 사람 ----------
@@ -545,7 +545,7 @@ function renderViewers() {
     $('#viewerList').replaceChildren();
     return;
   }
-  const others = who.total - 1;
+  const others = who.total;
   $('#viewersCount').textContent = others ? String(others) : '';
   $('#viewersStatus').textContent = others ? '명이 함께 보고 있어요' : '지금은 나 혼자 보고 있어요';
   const rows = who.people.map((p) => whoRow({ name: p.name, hue: hueOf(p.uid) }));
@@ -564,7 +564,7 @@ function onPresence(who) {
   $('#liveChip').hidden = who === null;
   if (who) {
     $('#liveCount').textContent = String(who.total);
-    $('#liveChip').setAttribute('aria-label', `지금 ${who.total}명이 보고 있어요. 누가 보는지 보기`);
+    $('#liveChip').setAttribute('aria-label', `나를 제외하고 지금 ${who.total}명이 보고 있어요. 누가 보는지 보기`);
   }
   if (viewers.isOpen) renderViewers();
 }
@@ -580,22 +580,7 @@ $('#accountBtn').addEventListener('click', () => {
   for (const r of document.querySelectorAll('input[name="theme"]')) r.checked = r.value === theme;
   $('#nickInput').value = state.store.user?.nickname ?? '';
   $('#nickInput').placeholder = '익명';
-  $('#myUid').textContent = state.store.uid ?? '아직 없어요';
-  $('#copyUid').disabled = !state.store.uid;
   profile.open();
-});
-
-$('#copyUid').addEventListener('click', async (e) => {
-  const btn = e.currentTarget;
-  try {
-    await navigator.clipboard.writeText(state.store.uid);
-    btn.textContent = '복사했어요';
-  } catch {
-    // 클립보드를 못 쓰면 글자를 골라 두어서 직접 복사하게 해요.
-    getSelection().selectAllChildren($('#myUid'));
-    btn.textContent = '직접 복사해 주세요';
-  }
-  setTimeout(() => { btn.textContent = '복사'; }, 2000);
 });
 
 $('#nickForm').addEventListener('submit', async (e) => {

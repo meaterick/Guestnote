@@ -476,15 +476,13 @@ test('설정에서 닉네임을 바꾸면 새 글부터 그 이름으로 남고,
   await setNickname(alice, '앨리스');
 });
 
-test('설정에는 닉네임, 화면, 관리자 등록용 내 ID만 있어요', async () => {
+test('설정에는 닉네임과 화면만 있어요', async () => {
   await alice.waitForSelector('.note.is-movable');
   await alice.click('#accountBtn');
   await alice.waitForSelector('#profile[open]');
   const controls = await alice.$$eval('#profile button, #profile input', (els) => els.map((el) => el.id || el.name || el.getAttribute('aria-label')));
-  assert.deepEqual(controls, ['닫기', 'nickInput', 'nickSave', 'theme', 'theme', 'theme', 'copyUid']);
-  assert.doesNotMatch(await alice.textContent('#profile'), /로그아웃|Google|이메일/);
-  await alice.click('#profile summary');
-  assert.equal(await alice.textContent('#myUid'), await uidOf(alice));
+  assert.deepEqual(controls, ['닫기', 'nickInput', 'nickSave', 'theme', 'theme', 'theme']);
+  assert.doesNotMatch(await alice.textContent('#profile'), /로그아웃|Google|이메일|내 ID|관리자 등록/);
   await alice.check('#profile input[name=theme][value=dark]', { force: true });
   assert.equal(await alice.evaluate(() => document.documentElement.dataset.theme), 'dark');
   await alice.check('#profile input[name=theme][value=auto]', { force: true });
@@ -573,10 +571,10 @@ test('카카오톡·인스타그램 앱 안에서도 브라우저를 바꾸지 �
   }
 });
 
-test('헤더에 지금 보는 사람 수가 나오고, 창을 닫으면 줄어요', async () => {
-  // alice, bob, guest 세 사람이 보고 있어요.
+test('헤더에 나를 제외한 사람 수가 나오고, 창을 닫으면 줄어요', async () => {
+  // alice, bob, guest 세 사람이 보고 있으므로 guest에게는 나를 뺀 2명이 보여요.
   const count = (page) => page.evaluate(() => Number(document.querySelector('#liveCount').textContent));
-  await guest.waitForFunction(() => !document.querySelector('#liveChip').hidden && Number(document.querySelector('#liveCount').textContent) >= 3, null, { timeout: 10_000 });
+  await guest.waitForFunction(() => !document.querySelector('#liveChip').hidden && Number(document.querySelector('#liveCount').textContent) >= 2, null, { timeout: 10_000 });
   // 앞 테스트에서 닫은 창이 다 빠질 때까지 기다렸다가 세요.
   await guest.waitForTimeout(5000);
   const before = await count(guest);
@@ -584,7 +582,7 @@ test('헤더에 지금 보는 사람 수가 나오고, 창을 닫으면 줄어�
   await guest.waitForFunction((n) => Number(document.querySelector('#liveCount').textContent) >= n + 1, before, { timeout: 10_000 });
   await extra.close({ runBeforeUnload: true });
   await guest.waitForFunction((n) => Number(document.querySelector('#liveCount').textContent) <= n, before, { timeout: 10_000 }).catch(async (e) => { throw new Error(`before=${before} now=${await count(guest)} ${e.message}`); });
-  assert.match(await guest.getAttribute('#liveChip', 'aria-label'), /지금 \d+명이 보고 있어요/);
+  assert.match(await guest.getAttribute('#liveChip', 'aria-label'), /나를 제외하고 지금 \d+명이 보고 있어요/);
 });
 
 test('지금 보는 사람을 누르면 닉네임을 정한 사람은 이름, 나머지는 익명으로 보여요', async () => {
@@ -601,8 +599,8 @@ test('지금 보는 사람을 누르면 닉네임을 정한 사람은 이름, �
   const seen = await names(guest);
   const anon = seen.find((t) => t.startsWith('익명'));
   assert.ok(anon, `익명 줄이 있어요: ${JSON.stringify(seen)}`);
-  // 목록에는 나를 빼고 보여 줘요. (헤더 숫자는 나까지 센 수)
-  assert.equal(Number(await guest.textContent('#viewersCount')), Number(await guest.textContent('#liveCount')) - 1);
+  // 목록과 헤더 모두 나를 빼고 같은 수를 보여 줘요.
+  assert.equal(Number(await guest.textContent('#viewersCount')), Number(await guest.textContent('#liveCount')));
   assert.equal(await guest.textContent('#viewersStatus'), '명이 함께 보고 있어요');
   // 열어 둔 채로 캐럴이 나가면 바로 빠져요.
   const leaving = await visitor();

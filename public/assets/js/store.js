@@ -288,7 +288,7 @@ export async function createStore(config) {
       const emit = () => {
         const cutoff = Date.now() + skew - recent;
         // 목록(people, anonymous)에는 나를 빼요. 같은 계정으로 연 다른 기기도 나예요.
-        // total은 나까지 센 수예요. (내 기록이 아직 반영 전이어도 나는 세요)
+        // total도 목록과 같이 나를 뺀 수예요. 혼자 보고 있으면 0명이에요.
         // 닉네임을 정한 사람은 이름으로, 나머지는 익명으로 세요. 같은 익명 id(여러 탭)는 한 사람이에요.
         const named = new Map();
         const nameless = new Set();
@@ -304,7 +304,7 @@ export async function createStore(config) {
         for (const uid of named.keys()) nameless.delete(uid);
         const people = [...named.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
         const anonymous = nameless.size;
-        onChange({ people, anonymous, total: people.length + anonymous + 1 });
+        onChange({ people, anonymous, total: people.length + anonymous });
       };
 
       const write = async () => {
