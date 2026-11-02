@@ -20,7 +20,7 @@
   <!-- 사용자 글은 textContent로만 그려요. 아래 정책은 혹시 모를 스크립트 삽입을 한 번 더 막아 줘요.
        Firebase(구글 API)와 개발용 에뮬레이터, 구글 글꼴만 허용해요.
        Firestore의 연결 확인 이미지(www.google.com/images/cleardot.gif)도 막히지 않게 열어 두었어요. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://www.google.com; connect-src 'self' https://*.googleapis.com https://www.google.com http://127.0.0.1:* http://localhost:*; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://www.google.com; connect-src 'self' https://gis.0404.go.kr https://*.googleapis.com https://www.google.com http://127.0.0.1:* http://localhost:*; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -192,15 +192,15 @@
   <dialog class="modal modal--travel" id="travel" aria-labelledby="tripTitle" data-state="loading">
     <section class="trip-panel">
       <header class="trip-header">
-        <div><p class="trip-eyebrow">A LITTLE DETOUR</p><h2 id="tripTitle">어디든, 떠나볼까.</h2><p class="trip-subtitle">계획 없이 고르는, 대한민국의 한 점.</p></div>
+        <div><p class="trip-eyebrow">A LITTLE DETOUR</p><h2 id="tripTitle">세계 어디로 떠나볼까?</h2><p class="trip-subtitle">경보를 확인한 나라와 도시로 떠나는 랜덤 여행.</p></div>
         <button class="icon-btn trip-close" type="button" data-close aria-label="여행 지도 닫기"><svg><use href="#i-close"/></svg></button>
       </header>
       <div class="trip-layout">
         <div class="trip-map-wrap">
-          <span class="trip-map-caption">SOUTH KOREA <i></i> LAND ONLY</span>
-          <svg id="tripMap" viewBox="0 0 560 560" role="img" aria-label="제주도·울릉도·독도를 포함한 대한민국 전국 지도">
+          <span class="trip-map-caption">WORLD TRIP <i></i> LIVE ADVISORY CHECK</span>
+          <svg id="tripMap" viewBox="0 0 760 440" role="img" aria-label="전 세계 도시와 여행 후보 위치를 표시하는 세계 지도">
             <defs><pattern id="tripGrid" width="35" height="35" patternUnits="userSpaceOnUse"><path d="M35 0H0V35" fill="none" stroke="currentColor" stroke-width=".5"/></pattern></defs>
-            <rect width="560" height="560" fill="url(#tripGrid)" class="trip-grid"/>
+            <rect width="760" height="440" fill="url(#tripGrid)" class="trip-grid"/>
             <g id="tripCamera" class="trip-camera">
               <g id="tripLand"></g><g id="tripLabels" class="trip-labels" aria-hidden="true"></g>
               <g id="tripTrail" class="trip-trail" aria-hidden="true"></g>
@@ -212,21 +212,21 @@
                 <circle class="trip-dot" r="3"/>
               </g>
             </g>
-            <g class="trip-north" transform="translate(510 60)" aria-hidden="true"><text y="-18" text-anchor="middle">N</text><path d="m0-8-5 18 5-4 5 4Z"/></g>
+            <g class="trip-north" transform="translate(710 60)" aria-hidden="true"><text y="-18" text-anchor="middle">N</text><path d="m0-8-5 18 5-4 5 4Z"/></g>
           </svg>
           <div class="trip-scan" aria-hidden="true"></div>
-          <button class="trip-overview" id="tripOverview" type="button" hidden>↙ 전국 보기</button>
+          <button class="trip-overview" id="tripOverview" type="button" hidden>↙ 세계 전체 보기</button>
           <span class="trip-map-foot">우연이 데려다주는 곳으로.</span>
         </div>
         <div class="trip-info">
           <span class="trip-result-label">YOUR NEXT DESTINATION</span>
-          <div class="trip-announcement" aria-live="polite" aria-atomic="true"><p class="trip-status" id="tripStatus">전국 지도를 펼치는 중…</p><h3 id="tripName">어디로 가게 될까?</h3><p class="trip-coords" id="tripCoords">북쪽에서 남쪽까지, 섬에서 내륙까지</p></div>
-          <div class="trip-links" id="tripLinks" hidden><a id="tripExternal" target="_blank" rel="noopener noreferrer">지도에서 보기 ↗</a><button id="tripCopy" type="button">좌표 복사</button></div>
-          <div class="trip-action"><button id="tripDraw" class="trip-draw" type="button" disabled>여행지 뽑기 ↗</button><p>전국의 육지에서 무작위로 골라요.<br>산이나 작은 섬도 목적지가 될 수 있어요.</p></div>
-          <p class="trip-note">지도의 경계는 간략화되어 있어요. 실제 접근 가능한 곳인지는 상세 지도에서 확인해 주세요.</p>
+          <div class="trip-announcement" aria-live="polite" aria-atomic="true"><p class="trip-status" id="tripStatus">세계 지도를 펼치는 중…</p><p class="trip-province" id="tripProvince" hidden></p><h3 id="tripName">이번엔 어느 나라일까?</h3><p class="trip-city-en" id="tripCityEn" hidden></p><p class="trip-coords" id="tripCoords">나라를 넘어, 새로운 도시로</p><p class="trip-place-status" id="tripPlaceStatus" hidden></p></div>
+          <div class="trip-links" id="tripLinks" hidden><a id="tripExternal" target="_blank" rel="noopener noreferrer">지도에서 보기 ↗</a><button id="tripCopy" type="button">좌표 복사</button><a id="tripAdvisory" href="https://www.0404.go.kr/" target="_blank" rel="noopener noreferrer">외교부 경보 확인 ↗</a></div>
+          <div class="trip-action"><button id="tripDraw" class="trip-draw" type="button" disabled>세계 여행지 뽑기 ↗</button><p>경보 미발령·1단계 지역만 확정해요.<br>2~4단계·특별여행주의보는 제외해요.</p></div>
+          <p class="trip-note">한국 외교부 경보를 확인한 시각 기준의 여행 후보예요. 비자·입국 조건과 현지 접근성은 출발 전에 별도로 확인해 주세요.</p>
         </div>
       </div>
-      <footer class="trip-credit">지도: 통계청 SGIS, 2018 · <a href="https://github.com/southkorea/southkorea-maps/tree/60c8c0cf0016381d80004d6b125760d6c5cb0605/kostat/2018/json" target="_blank" rel="noopener noreferrer">southkorea-maps</a> · 공공누리 제1유형 · 경계 단순화</footer>
+      <footer class="trip-credit">지도·도시: <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener noreferrer">Natural Earth</a> · 여행경보: <a href="https://www.0404.go.kr/" target="_blank" rel="noopener noreferrer">한국 외교부</a> (추첨할 때 조회)</footer>
     </section>
   </dialog>
 </body>

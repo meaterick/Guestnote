@@ -8,7 +8,7 @@ import { createWriter } from './writer.js';
 import { createSelection } from './selection.js';
 import { createCalendar } from './calendar.js';
 import { isSafeImageUrl } from './image.js';
-import { setupTravel } from './travel.js';
+import { setupTravel } from './travel-world.js';
 
 const config = {
   siteTitle: 'Guestnote',

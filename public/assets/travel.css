@@ -3,14 +3,14 @@
 .dock[data-mode="today"] > .trip-launch { display:inline-flex; }
 .trip-launch svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.6; transition:rotate .5s; }
 .trip-launch:hover svg { rotate:65deg; }
-.modal--travel { width:min(940px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); margin:auto; color:#234c43; }
+.modal--travel { width:min(1040px,calc(100vw - 32px)); max-height:calc(100dvh - 32px); margin:auto; color:#234c43; }
 .trip-panel { --trip-ink:#234c43; --trip-muted:#70867a; background:#f9f8ef; padding:28px 30px 14px; border:1px solid #fff; border-radius:28px; overflow:auto; max-height:calc(100dvh - 32px); box-shadow:0 30px 90px #0c2c3340; }
 .trip-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:22px; }
 .trip-eyebrow { font:10px/1.2 ui-monospace,monospace; letter-spacing:.24em; color:var(--trip-muted); margin:0 0 12px; }
-.trip-header h2 { font:400 43px/1.08 var(--font-hand); margin:0; letter-spacing:-.025em; }
+.trip-header h2 { font:400 43px/1.08 var(--font-hand); margin:0; letter-spacing:-.025em; word-break:keep-all; text-wrap:balance; }
 .trip-subtitle { margin:9px 0 0; color:var(--trip-muted); font-size:13px; }
 .trip-close { color:var(--trip-ink); background:#e8ece3; flex-shrink:0; }
-.trip-layout { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(0,1fr); gap:30px; }
+.trip-layout { display:grid; grid-template-columns:minmax(0,1.75fr) minmax(0,1fr); gap:30px; }
 .trip-map-wrap { position:relative; min-width:0; overflow:hidden; border:1px solid #cedcd1; border-radius:18px; background:radial-gradient(ellipse at 40% 30%,#f3f8ee,#dce9e4); isolation:isolate; }
 #tripMap { display:block; width:100%; height:100%; min-height:380px; max-height:500px; color:#799c91; }
 .trip-grid { opacity:.35; }
@@ -36,7 +36,10 @@
 .trip-info { min-width:0; display:flex; flex-direction:column; padding:24px 0 8px; }
 .trip-result-label { font:9px ui-monospace,monospace; color:var(--trip-muted); letter-spacing:.16em; padding-bottom:24px; border-bottom:1px solid #dce2d6; }
 .trip-status { font-size:12px; color:var(--trip-muted); margin:25px 0 10px; }
-#tripName { font-size:32px; line-height:1.35; letter-spacing:-.04em; font-weight:400; margin:0 0 16px; min-height:1.35em; word-break:keep-all; }
+.trip-province { font-size:13px; color:#6c8473; margin:0 0 6px; }
+.trip-city-en { color:#70867a; font:11px/1.6 ui-monospace,monospace; margin:-8px 0 12px; overflow-wrap:anywhere; }
+.trip-place-status { font-size:10px; line-height:1.7; color:#7a8a74; margin:7px 0 0; }
+#tripName { font-size:32px; line-height:1.35; letter-spacing:-.04em; font-weight:400; margin:0 0 16px; min-height:1.35em; word-break:keep-all; overflow-wrap:anywhere; }
 .trip-coords { color:#6c8473; font:10px/1.8 ui-monospace,monospace; margin:0; min-height:36px; user-select:all; overflow-wrap:anywhere; }
 .trip-links { display:flex; gap:14px; flex-wrap:wrap; margin-top:12px; }
 .trip-links[hidden] { display:none; }
@@ -64,14 +67,17 @@
   .modal--travel { width:100%; max-height:96dvh; margin:auto 0 0; }
   .trip-panel { padding:20px 18px max(14px,env(safe-area-inset-bottom)); border-radius:26px 26px 0 0; max-height:96dvh; }
   .trip-header { margin-bottom:16px; }
-  .trip-header h2 { font-size:36px; }
+  .trip-header h2 { font-size:32px; }
   .trip-eyebrow { font-size:9px; margin-bottom:8px; }
   .trip-subtitle { font-size:12px; margin-top:6px; }
   .trip-layout { grid-template-columns:1fr; gap:0; }
-  #tripMap { height:37dvh; min-height:210px; max-height:340px; }
+  #tripMap { height:28dvh; min-height:180px; max-height:280px; }
   .trip-info { display:grid; grid-template-columns:1fr; padding:18px 2px 0; }
   .trip-result-label { display:none; }
   .trip-status { margin:0 0 6px; }
+  .trip-province { font-size:12px; margin:0 0 4px; }
+  .trip-city-en { margin:0 0 8px; font-size:10px; }
+  .trip-place-status { margin-top:5px; font-size:9px; }
   #tripName { font-size:25px; margin:0 0 5px; min-height:0; }
   .trip-coords { font-size:10px; min-height:0; }
   .trip-links { margin-top:9px; }
