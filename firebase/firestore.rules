@@ -2,11 +2,12 @@ rules_version = '2';
 
 // Guestnote Firestore 보안 규칙
 //
-// - 누구나 모든 날짜의 보드를 읽을 수 있어요. 글을 남기려면 Google 계정으로 로그인해야 해요.
+// - 누구나 모든 날짜의 보드를 읽고, 로그인 없이 바로 글을 남겨요.
+//   화면이 브라우저마다 익명 계정(Firebase 익명 로그인)을 몰래 만들어서, 그 id로 '내 글'을 구분해요.
 // - 글은 '오늘' 보드에서만 남기고, 옮기고, 고칠 수 있어요. 지난 보드는 읽기만 해요.
 //   오늘은 utcOffsetHours() 시간대의 날짜예요. public/config.js 의 timeZone 을 바꾸면 여기 값도 같이 바꿔 주세요. (한국 = 9)
 // - 내 글은 오늘 안에서 옮기거나 고치거나 지울 수 있어요.
-// - 새 글의 작성자는 내 닉네임(profiles/{uid}), 닉네임이 없으면 Google 계정 이름이에요. 이미 쓴 글의 작성자는 바뀌지 않아요.
+// - 새 글의 작성자는 내 닉네임(profiles/{uid}), 닉네임이 없으면 '익명'이에요. 이미 쓴 글의 작성자는 바뀌지 않아요.
 // - 관리자(admins/{uid} 문서가 있는 사람)는 오늘 보드의 남의 글도 옮길 수 있고, 어느 날의 글이든 지울 수 있어요.
 //   지난 글을 옮기거나 고치는 건 관리자도 못 해요.
 // - 보드 크기(4000 x 2600), 글자 수(이름 20자, 내용 500자), 사진 용량은 화면 코드와 맞춰 두었어요.
@@ -18,23 +19,21 @@ service cloud.firestore {
       return 9;
     }
 
-    // Google 계정으로 로그인한 사람만 써요. (익명 로그인 등 다른 방식은 막아요)
+    // 화면이 만든 익명 계정이 있어야 써요. (예전에 Google로 로그인해 둔 브라우저도 그대로 써요)
     function signedIn() {
-      return request.auth != null && request.auth.token.firebase.sign_in_provider == 'google.com';
+      return request.auth != null;
     }
 
     function isAdmin() {
       return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // 화면과 같이 계정 이름의 앞뒤 공백을 빼고 20자까지만 표시해요.
+    // 닉네임이 없으면 모두 '익명'이에요. (계정 이름은 쓰지 않아요)
     function accountAuthor() {
-      let raw = request.auth.token.get('name', '');
-      let name = raw is string ? raw.trim() : '';
-      return name.size() == 0 ? '방문자' : (name.size() > 20 ? name[0:20] : name);
+      return '익명';
     }
 
-    // 닉네임: 앞뒤 공백 없이 1~20자. 닉네임을 정했으면 새 글의 작성자는 닉네임, 아니면 Google 계정 이름이에요.
+    // 닉네임: 앞뒤 공백 없이 1~20자. 닉네임을 정했으면 새 글의 작성자는 닉네임, 아니면 '익명'이에요.
     function validNickname(n) {
       return n is string && n.size() >= 1 && n.size() <= 20 && n == n.trim() && n.matches('.*[^\\s].*');
     }
@@ -157,26 +156,25 @@ service cloud.firestore {
           || (isToday(resource.data.date) && resource.data.ownerId == request.auth.uid));
     }
 
-    // 관리자 목록은 Firebase 콘솔에서만 만들어요. 자기 문서만 확인할 수 있어요.
-    // 지금 보는 사람. 로그인하지 않은 방문자도 남기고, 서버 시각(+ 로그인했으면 내 uid와 이름)만 담아요.
+    // 지금 보는 사람. 서버 시각과 내 익명 id(uid), 닉네임을 정했으면 그 이름만 담아요.
     match /presence/{id} {
       allow list: if true;
-      // 익명이면 시각만, 로그인했으면 내 uid와 내 이름(글에 붙는 이름과 같아요)도 남길 수 있어요.
       allow create, update: if id.matches('[a-z0-9]{20}')
         && request.resource.data.seen == request.time
         && (request.resource.data.keys().hasOnly(['seen'])
           || (signedIn()
             && request.resource.data.keys().hasOnly(['seen', 'uid', 'name'])
             && request.resource.data.uid == request.auth.uid
-            && request.resource.data.name == authorName()));
+            && (!('name' in request.resource.data) || request.resource.data.name == authorName())));
       allow delete: if id.matches('[a-z0-9]{20}');
     }
 
+    // 관리자 목록은 Firebase 콘솔에서만 만들어요. (설정 창의 '내 ID'를 문서 id로) 자기 문서만 확인할 수 있어요.
     match /admins/{uid} {
       allow get: if signedIn() && request.auth.uid == uid;
     }
 
-    // 내 닉네임. 본인만 읽고 바꾸고 지울 수 있어요. (지우면 다시 Google 계정 이름을 써요)
+    // 내 닉네임. 본인만 읽고 바꾸고 지울 수 있어요. (지우면 다시 '익명'으로 써요)
     match /profiles/{uid} {
       allow get, delete: if signedIn() && request.auth.uid == uid;
       allow create, update: if signedIn() && request.auth.uid == uid

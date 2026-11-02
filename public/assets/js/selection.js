@@ -124,7 +124,7 @@ export function createSelection({ bar, viewer, store, timeZone, permissions, boa
       current = next;
       if (confirmBox.hidden) render();
     },
-    // 로그인 상태가 바뀌면 고치기·지우기 버튼을 다시 정해요.
+    // 익명 계정이 준비되면 고치기·지우기 버튼을 다시 정해요.
     refresh() {
       if (current && confirmBox.hidden) render();
     },

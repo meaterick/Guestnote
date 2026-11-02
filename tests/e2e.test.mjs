@@ -41,26 +41,16 @@ async function visitor(options = {}, { clock } = {}) {
 }
 
 // 에뮬레이터의 가짜 Google 로그인 창에서 계정을 만들어 로그인해요.
-// 창의 스크립트가 다 뜨기 전에 누르면 입력란이 안 열려서, 보일 때까지 다시 눌러요.
-async function finishGooglePopup(popup, name, email) {
-  await popup.waitForLoadState('load');
-  const emailInput = popup.locator('#email-input');
-  for (let attempt = 0; attempt < 5; attempt++) {
-    await popup.click('text=Add new account');
-    if (await emailInput.waitFor({ state: 'visible', timeout: 2000 }).then(() => true, () => false)) break;
-  }
-  await emailInput.fill(email);
-  await popup.fill('#display-name-input', name);
-  await popup.click('#sign-in');
-}
+// 로그인은 없어요. 화면이 익명 계정을 만들 때까지 기다려요.
+const canWrite = (page) => page.waitForSelector('body.can-write', { state: 'attached', timeout: 15_000 });
 
-async function signInWithGoogle(page, name, email) {
+// 설정에서 닉네임을 정해요.
+async function setNickname(page, name) {
   await page.click('#accountBtn');
-  await page.waitForSelector('#signin[open]');
-  const [popup] = await Promise.all([page.waitForEvent('popup'), page.click('#googleSignIn')]);
-  await finishGooglePopup(popup, name, email);
-  await page.waitForFunction(() => document.querySelector('#accountBtn').classList.contains('is-signed-in'), null, { timeout: 15_000 });
-  await page.waitForFunction(() => !document.querySelector('#signin').open);
+  await page.waitForSelector('#profile[open]');
+  await page.fill('#nickInput', name);
+  await page.click('#nickSave');
+  await page.waitForFunction(() => !document.querySelector('#profile').open, null, { timeout: 15_000 });
 }
 
 // 다른 사람이 지난 날에 남긴 것처럼 글을 직접 넣어요. (보안 규칙을 끄고 넣어요)
@@ -105,44 +95,49 @@ after(async () => {
   await env?.cleanup();
 });
 
-test('로그인하지 않아도 보드를 볼 수 있고, 글을 남기려면 Google 로그인을 안내해요', async () => {
+test('로그인 없이 보드를 보고, 바로 익명으로 글상자를 열 수 있어요', async () => {
   assert.equal(await guest.isVisible('#boardTip .board-tip__mouse'), true);
   assert.match(await guest.textContent('#boardMessageTitle'), /오늘의 첫 글/);
-  assert.equal(await guest.textContent('#accountBtn'), '로그인');
+  assert.equal(await guest.getAttribute('#accountBtn', 'aria-label'), '설정: 닉네임과 화면');
+  assert.equal(await guest.locator('#signin, #googleSignIn, #inAppBar, #signOutBtn').count(), 0, '로그인 화면은 없어요');
+  assert.doesNotMatch(await guest.textContent('body'), /로그인|Google/);
   assert.equal(await guest.isHidden('#adminChip'), true);
   assert.equal(await guest.locator('#minimap, .minimap, .zoombar, #zoomLabel, #infoBtn').count(), 0, '미니맵과 확대 비율 표시는 없어요');
   await guest.click('#writeBtn');
-  await guest.waitForSelector('#signin[open]');
-  assert.equal(await guest.locator('.is-draft').count(), 0);
+  await guest.waitForSelector('.note.is-draft textarea', { timeout: 15_000 });
+  assert.equal(await guest.textContent('.is-draft .draft__name'), '익명');
+  assert.equal(await guest.evaluate(() => document.querySelector('dialog[open]')), null, '따로 뜨는 창이 없어요');
   await guest.keyboard.press('Escape');
-  // 빈 곳을 두 번 눌러도 로그인을 안내해요.
+  await guest.waitForSelector('.is-draft', { state: 'detached' });
+  // 빈 곳을 두 번 눌러도 바로 열려요.
   await guest.mouse.dblclick(640, 420);
-  await guest.waitForSelector('#signin[open]');
+  await guest.waitForSelector('.note.is-draft textarea');
   await guest.keyboard.press('Escape');
 });
 
-test('Google로 로그인하면 보드 위에 글상자가 열리고 작성자는 계정 이름으로 고정돼요', async () => {
+test('글상자는 보드 위에 바로 열리고, 닉네임을 정하면 그 이름으로 남아요', async () => {
   await alice.evaluate(() => localStorage.setItem('guestnote:author', '예전에 적은 별명'));
   await alice.click('#writeBtn');
-  await alice.waitForSelector('#signin[open]');
-  const [popup] = await Promise.all([alice.waitForEvent('popup'), alice.click('#googleSignIn')]);
-  await finishGooglePopup(popup, '앨리스', 'alice@example.com');
   await alice.waitForSelector('.note.is-draft textarea', { timeout: 15_000 });
-  assert.equal(await alice.evaluate(() => document.querySelector('dialog[open]')), null, '글쓰기 창은 따로 뜨지 않아요');
-  assert.equal(await alice.textContent('.is-draft .draft__name'), '앨리스');
+  assert.equal(await alice.textContent('.is-draft .draft__name'), '익명', '예전에 적어 둔 별명은 쓰지 않아요');
   assert.equal(await alice.locator('.is-draft input, .is-draft [contenteditable=true], .note__dash').count(), 0);
   assert.equal(await alice.isHidden('#boardTip'), true);
   assert.equal(await alice.evaluate(() => document.activeElement?.classList.contains('draft__text')), true, '바로 쓸 수 있게 커서가 있어요');
   assert.equal(await alice.inputValue('#writeBar input[name=style]:checked'), 'text', '기본 모양은 글자만');
   assert.equal(await dockMode(alice), 'write');
-  assert.equal(await alice.textContent('#accountBtn'), '앨');
   await alice.keyboard.press('Escape');
   await alice.waitForSelector('.is-draft', { state: 'detached' });
   assert.equal(await dockMode(alice), 'today');
   assert.equal(await alice.isVisible('#boardTip'), true);
 
-  await signInWithGoogle(bob, '밥', 'bob@example.com');
-  assert.notEqual(await uidOf(alice), await uidOf(bob));
+  await setNickname(alice, '앨리스');
+  await alice.click('#writeBtn');
+  await alice.waitForSelector('.note.is-draft textarea');
+  assert.equal(await alice.textContent('.is-draft .draft__name'), '앨리스');
+  await alice.keyboard.press('Escape');
+  await setNickname(bob, '밥');
+  assert.ok(await uidOf(alice));
+  assert.notEqual(await uidOf(alice), await uidOf(bob), '브라우저마다 다른 익명 계정이에요');
 });
 
 test('빈 곳을 두 번 눌러 쓰면 그 자리에 붙고, 다른 사람 보드에도 바로 나타나요', async () => {
@@ -448,55 +443,60 @@ test('지난 날짜는 달력과 주소로 찾아가서 읽기만 할 수 있어
   assert.equal(await alice.textContent('#dateBadge'), '오늘');
 });
 
-test('프로필에서 닉네임을 바꾸면 새 글부터 그 이름으로 남고, 비우면 계정 이름으로 돌아가요', async () => {
+test('설정에서 닉네임을 바꾸면 새 글부터 그 이름으로 남고, 비우면 익명으로 돌아가요', async () => {
   const before = await alice.locator('.note.is-mine').first().locator('.note__sign').textContent();
   await alice.click('#accountBtn');
   await alice.waitForSelector('#profile[open]');
-  assert.equal(await alice.inputValue('#nickInput'), '');
-  assert.equal(await alice.getAttribute('#nickInput', 'placeholder'), '앨리스');
+  assert.equal(await alice.inputValue('#nickInput'), '앨리스');
+  assert.equal(await alice.getAttribute('#nickInput', 'placeholder'), '익명');
   await alice.fill('#nickInput', '  별빛  ');
   await alice.press('#nickInput', 'Enter');
   await alice.waitForFunction(() => !document.querySelector('#profile').open);
-  assert.equal(await alice.textContent('#accountBtn'), '별');
   await write(alice, { text: '닉네임으로 남긴 글' });
   const nicked = bob.locator('.note', { hasText: '닉네임으로 남긴 글' });
   await nicked.waitFor({ timeout: 10_000 });
   assert.equal(await nicked.locator('.note__sign').textContent(), '별빛');
   assert.equal(await alice.locator('.note.is-mine').first().locator('.note__sign').textContent(), before, '이미 쓴 글의 이름은 그대로예요');
-  // 새로고침해도 닉네임이 남아 있어요.
+  // 새로고침해도 같은 익명 계정이고, 닉네임이 남아 있어요.
+  const uid = await uidOf(alice);
   await alice.reload();
   await ready(alice);
-  await alice.waitForFunction(() => document.querySelector('#accountBtn').textContent === '별');
+  await canWrite(alice);
+  assert.equal(await uidOf(alice), uid);
   await alice.click('#accountBtn');
   assert.equal(await alice.inputValue('#nickInput'), '별빛');
   await alice.fill('#nickInput', '');
   await alice.click('#nickSave');
-  await alice.waitForFunction(() => document.querySelector('#accountBtn').textContent === '앨');
+  await alice.waitForFunction(() => !document.querySelector('#profile').open);
+  assert.match(await alice.textContent('#toasts'), /익명으로 글을 남겨요/);
+  await alice.click('#writeBtn');
+  await alice.waitForSelector('.note.is-draft textarea');
+  assert.equal(await alice.textContent('.is-draft .draft__name'), '익명');
+  await alice.keyboard.press('Escape');
+  await setNickname(alice, '앨리스');
 });
 
-test('프로필에는 닉네임, 화면 설정, 로그아웃만 있고, 로그아웃하면 내 글도 옮길 수 없어요', async () => {
+test('설정에는 닉네임, 화면, 관리자 등록용 내 ID만 있어요', async () => {
   await alice.waitForSelector('.note.is-movable');
   await alice.click('#accountBtn');
   await alice.waitForSelector('#profile[open]');
   const controls = await alice.$$eval('#profile button, #profile input', (els) => els.map((el) => el.id || el.name || el.getAttribute('aria-label')));
-  assert.deepEqual(controls, ['닫기', 'nickInput', 'nickSave', 'theme', 'theme', 'theme', 'signOutBtn']);
-  assert.doesNotMatch(await alice.textContent('#profile'), /alice@example\.com|계정 ID|관리자|이렇게 써요|유리 효과/);
+  assert.deepEqual(controls, ['닫기', 'nickInput', 'nickSave', 'theme', 'theme', 'theme', 'copyUid']);
+  assert.doesNotMatch(await alice.textContent('#profile'), /로그아웃|Google|이메일/);
+  await alice.click('#profile summary');
+  assert.equal(await alice.textContent('#myUid'), await uidOf(alice));
   await alice.check('#profile input[name=theme][value=dark]', { force: true });
   assert.equal(await alice.evaluate(() => document.documentElement.dataset.theme), 'dark');
   await alice.check('#profile input[name=theme][value=auto]', { force: true });
   assert.equal(await alice.evaluate(() => document.documentElement.dataset.theme ?? null), null);
-  await alice.click('#signOutBtn');
-  await alice.waitForFunction(() => document.querySelector('#accountBtn').textContent === '로그인');
+  await alice.keyboard.press('Escape');
   assert.equal(await alice.evaluate(() => document.querySelector('#profile').open), false);
-  assert.equal(await alice.locator('.note.is-movable').count(), 0);
-  assert.equal(await alice.locator('.note.is-mine').count(), 0);
 });
 
 test('자정이 지나면 새 보드가 열리고, 어제 글은 지난 보드로 남아요', async () => {
   // 브라우저 시계만 오늘 밤 23:59:20으로 돌려요. 서버(에뮬레이터)는 실제 시각이라 '오늘' 날짜가 같아요.
   const today = kstDay();
   const night = await visitor({}, { clock: new Date(`${today}T23:59:20+09:00`) });
-  await signInWithGoogle(night, '자정', 'night@example.com');
   await write(night, { text: '자정 직전의 글' });
   await night.waitForSelector('.note >> text=자정 직전의 글');
 
@@ -515,16 +515,15 @@ test('자정이 지나면 새 보드가 열리고, 어제 글은 지난 보드�
   await night.context().close();
 });
 
-test('휴대폰에서도 로그인하고 보드에 바로 글을 쓸 수 있어요', async () => {
+test('휴대폰에서도 로그인 없이 보드에 바로 글을 쓸 수 있어요', async () => {
   const phone = await visitor({ ...devices['iPhone 13'] });
   assert.equal(await phone.isVisible('#boardTip .board-tip__touch'), true);
   assert.equal(await phone.isHidden('#boardTip .board-tip__mouse'), true);
   const tip = await phone.locator('#boardTip').boundingBox();
   assert.ok(tip.x >= 0 && tip.x + tip.width <= phone.viewportSize().width);
-  await signInWithGoogle(phone, '모바일', 'phone@example.com');
   await phone.tap('#writeBtn');
-  await phone.waitForSelector('.is-draft textarea');
-  assert.equal(await phone.textContent('.is-draft .draft__name'), '모바일');
+  await phone.waitForSelector('.is-draft textarea', { timeout: 15_000 });
+  assert.equal(await phone.textContent('.is-draft .draft__name'), '익명');
   assert.equal(await phone.isVisible('#writeSubmit'), true);
   await phone.fill('.is-draft textarea', '폰에서 남겨요');
   await phone.tap('#writeSubmit');
@@ -539,7 +538,7 @@ test('휴대폰에서도 로그인하고 보드에 바로 글을 쓸 수 있어�
 
 test('휴대폰에서 빈 곳을 두 번 누르면 그 자리에 글상자가 열리고 바로 쓸 수 있어요', async () => {
   const phone = await visitor({ ...devices['iPhone 13'] });
-  await signInWithGoogle(phone, '두번', 'double@example.com');
+  await canWrite(phone);
   const spot = await emptySpot(phone);
   assert.ok(spot, '빈 곳이 있어요');
   await phone.touchscreen.tap(spot.x, spot.y);
@@ -560,68 +559,18 @@ test('휴대폰에서 빈 곳을 두 번 누르면 그 자리에 글상자가 �
   await phone.context().close();
 });
 
-test('카카오톡·인스타그램 앱 안에서는 Google 로그인 대신 브라우저로 여는 방법을 보여 줘요', async () => {
+test('카카오톡·인스타그램 앱 안에서도 브라우저를 바꾸지 않고 바로 글을 써요', async () => {
   const iphone = devices['iPhone 13'];
-  const android = devices['Pixel 7'];
-  const cases = [
-    { name: '카카오톡', device: { ...iphone, userAgent: `${iphone.userAgent} KAKAOTALK 10.8.5` }, open: '다른 브라우저로 열기' },
-    { name: '아이폰 인스타그램', device: { ...iphone, userAgent: `${iphone.userAgent} Instagram 350.0.0.0` }, open: 'Safari로 열기' },
-    { name: '안드로이드 인스타그램', device: { ...android, userAgent: `${android.userAgent} Instagram 350.0.0.0` }, open: null },
-  ];
-  for (const c of cases) {
-    const page = await visitor(c.device);
+  for (const ua of [' KAKAOTALK 10.8.5', ' Instagram 350.0.0.0']) {
+    const page = await visitor({ ...iphone, userAgent: `${iphone.userAgent}${ua}` });
+    assert.equal(await page.locator('#inAppBar, #signin, #openExternal').count(), 0, ua);
     await page.tap('#writeBtn');
-    await page.waitForSelector('#signin[open]');
-    assert.equal(await page.isVisible('#inAppHint'), true, c.name);
-    assert.equal(await page.isVisible('#googleSignIn'), false, `${c.name}: 막히는 Google 버튼은 숨겨요`);
-    assert.equal(await page.isVisible('#copyLink'), true, c.name);
-    if (c.open) assert.equal(await page.textContent('#openExternal'), c.open);
-    else assert.equal(await page.isVisible('#openExternal'), false, c.name);
-    // 카카오톡 말고는 메뉴로 여는 방법을 처음부터 보여 줘요.
-    assert.equal(await page.isVisible('#inAppSteps'), c.name !== '카카오톡', c.name);
-    await page.keyboard.press('Escape');
-    // 보드 위쪽에도 앱 안에서는 글을 쓸 수 없다고 알려 줘요.
-    assert.equal(await page.isVisible('#inAppBar'), true, c.name);
-    if (c.name === '아이폰 인스타그램') {
-      // 인스타그램이 스스로 지원하는 주소로 바깥 브라우저를 열고, 넘어가지 않으면 ⋯ 메뉴를 가리켜요.
-      await page.tap('#inAppBarOpen');
-      assert.equal(await page.evaluate(() => document.documentElement.dataset.escape), `instagram://extbrowser/?url=${encodeURIComponent(await page.evaluate(() => location.href))}`);
-      await page.waitForSelector('#escapeArrow:not([hidden])', { timeout: 5000 });
-      assert.equal(await page.isVisible('#signin[open] #inAppSteps'), true);
-      const arrow = await page.locator('#escapeArrow').boundingBox();
-      assert.ok(arrow.y < 60 && arrow.x + arrow.width > page.viewportSize().width - 40, '오른쪽 위를 가리켜요');
-    }
-    if (c.name === '안드로이드 인스타그램') {
-      await page.tap('#inAppBarOpen');
-      await page.waitForSelector('#escapeArrow:not([hidden])');
-      assert.match(await page.textContent('#inAppSteps'), /⋮.*다른 브라우저로 열기/s);
-    }
+    await page.waitForSelector('.is-draft textarea', { timeout: 15_000 });
+    await page.fill('.is-draft textarea', `앱 안에서 남겨요${ua}`);
+    await page.tap('#writeSubmit');
+    await bob.waitForSelector(`.note >> text=앱 안에서 남겨요${ua}`, { timeout: 10_000 });
     await page.context().close();
   }
-  // iOS 16에서는 x-safari- 주소가 막혀서 (페이스북 앱 등은) 버튼 대신 메뉴 안내만 보여요.
-  const ios16 = await visitor({ ...iphone, userAgent: iphone.userAgent.replace(/OS \d+_\d+/, 'OS 16_6') + ' [FBAN/FBIOS;FBAV/450.0.0.0]' });
-  await ios16.tap('#writeBtn');
-  await ios16.waitForSelector('#signin[open]');
-  assert.equal(await ios16.isVisible('#openExternal'), false);
-  assert.equal(await ios16.isVisible('#inAppSteps'), true);
-  await ios16.context().close();
-  // 인스타그램은 자기 주소를 쓰니 iOS 16에서도 버튼이 있고, 스레드는 스레드 주소를 써요.
-  for (const [ua, scheme] of [[' Instagram 350.0.0.0', 'instagram'], [' Barcelona 350.0.0.0', 'barcelona']]) {
-    const p = await visitor({ ...iphone, userAgent: iphone.userAgent.replace(/OS \d+_\d+/, 'OS 16_6') + ua });
-    await p.tap('#writeBtn');
-    await p.waitForSelector('#signin[open]');
-    assert.equal(await p.isVisible('#openExternal'), true, scheme);
-    await p.tap('#openExternal');
-    assert.match(await p.evaluate(() => document.documentElement.dataset.escape), new RegExp(`^${scheme}://extbrowser/\\?url=https?%3A`));
-    await p.context().close();
-  }
-  // 보통 브라우저에서는 Google 버튼만 보여요.
-  await guest.click('#writeBtn');
-  await guest.waitForSelector('#signin[open]');
-  assert.equal(await guest.isVisible('#inAppHint'), false);
-  assert.equal(await guest.isVisible('#googleSignIn'), true);
-  assert.equal(await guest.isVisible('#inAppBar'), false);
-  await guest.keyboard.press('Escape');
 });
 
 test('헤더에 지금 보는 사람 수가 나오고, 창을 닫으면 줄어요', async () => {
@@ -638,9 +587,10 @@ test('헤더에 지금 보는 사람 수가 나오고, 창을 닫으면 줄어�
   assert.match(await guest.getAttribute('#liveChip', 'aria-label'), /지금 \d+명이 보고 있어요/);
 });
 
-test('지금 보는 사람을 누르면 로그인한 사람은 이름, 나머지는 익명으로 보여요', async () => {
+test('지금 보는 사람을 누르면 닉네임을 정한 사람은 이름, 나머지는 익명으로 보여요', async () => {
+  const nameless = await visitor();
   const carol = await visitor();
-  await signInWithGoogle(carol, '캐럴', 'carol@example.com');
+  await setNickname(carol, '캐럴');
   await guest.waitForSelector('#liveChip:not([hidden])');
   const names = (page) => page.$$eval('#viewerList .who__name', (els) => els.map((el) => el.textContent));
   const listed = (page, name) => page.evaluate((n) => [...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === n), name);
@@ -656,7 +606,7 @@ test('지금 보는 사람을 누르면 로그인한 사람은 이름, 나머지
   assert.equal(await guest.textContent('#viewersStatus'), '명이 함께 보고 있어요');
   // 열어 둔 채로 캐럴이 나가면 바로 빠져요.
   const leaving = await visitor();
-  await signInWithGoogle(leaving, '데이브', 'dave@example.com');
+  await setNickname(leaving, '데이브');
   await guest.waitForFunction(() => [...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === '데이브'), null, { timeout: 5_000 });
   await leaving.close({ runBeforeUnload: true });
   await guest.waitForFunction(() => ![...document.querySelectorAll('#viewerList .who__name')].some((el) => el.textContent === '데이브'), null, { timeout: 5_000 });
@@ -684,6 +634,8 @@ test('지금 보는 사람을 누르면 로그인한 사람은 이름, 나머지
   await guest.keyboard.press('Escape');
   await carol.close({ runBeforeUnload: true });
   await carol.context().close();
+  await nameless.close({ runBeforeUnload: true });
+  await nameless.context().close();
 });
 
 test('공유 미리보기 정보와 이미지가 있어요', async () => {

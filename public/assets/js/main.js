@@ -280,15 +280,34 @@ function checkDay() {
 
 // ---------- 글쓰기 ----------
 // at: 글상자를 열 보드 좌표, file: 처음부터 넣을 사진
-function startWriting(opts = {}) {
+// 로그인은 없어요. 처음 온 브라우저는 익명 계정이 만들어질 때까지(보통 1초 안) 기다렸다가 열어요.
+async function startWriting(opts = {}) {
   if (!state.store) return;
   if (!state.store.canWrite) {
-    askSignIn(opts);
-    return;
+    try {
+      await state.store.ready();
+    } catch (err) {
+      toast(authErrorMessage(err), { tone: 'error', duration: 6000 });
+      return;
+    }
+    // 기다리는 사이 손가락은 이미 떨어졌으니 바로 커서를 둬요.
+    opts = { ...opts, deferFocus: false };
   }
   if (state.view !== state.today) goTo(state.today);
   selection.clear();
   writer.start({ ...opts, defaultAuthor: state.store.author });
+}
+
+function authErrorMessage(err) {
+  const code = err?.code || '';
+  if (code === 'auth/operation-not-allowed' || code === 'auth/admin-restricted-operation') {
+    return '아직 글을 남길 수 없어요. 사이트 관리자가 Firebase에서 익명 로그인을 켜야 해요.';
+  }
+  if (code === 'auth/network-request-failed') return '인터넷 연결을 확인하고 다시 시도해 주세요.';
+  if (code === 'auth/web-storage-unsupported' || code === 'auth/operation-not-supported-in-this-environment') {
+    return '이 브라우저에서는 글을 남길 수 없어요. 사이트 데이터 저장을 허용하거나 다른 브라우저로 열어 주세요.';
+  }
+  return '글을 남길 준비를 하지 못했어요. 잠시 후 다시 시도해 주세요.';
 }
 
 async function submitNote({ mode, note, id, data, image, pos }) {
@@ -479,188 +498,7 @@ if (window.visualViewport) {
 // 알림은 아래 막대 바로 위에 떠요. 막대 높이가 바뀌면 같이 올라가요.
 new ResizeObserver(() => root.style.setProperty('--dock-h', `${dock.offsetHeight}px`)).observe(dock);
 
-// ---------- Google 로그인 ----------
-// 카카오톡 같은 앱 안의 브라우저에서는 Google이 로그인을 막아서, 다른 브라우저로 열도록 안내해요.
-const UA = navigator.userAgent;
-const isIOS = /iPhone|iPad|iPod/i.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1);
-const inKakao = /KAKAOTALK/i.test(UA);
-const inInstagram = /Instagram/i.test(UA);
-const inAppBrowser = inKakao || inInstagram || /Barcelona/i.test(UA) || /FBAN|FBAV|Line\/|NAVER\(inapp|DaumApps|everytimeApp|; wv\)/i.test(UA);
-const inThreads = /Barcelona/i.test(UA);
-const iosMajor = Number(/OS (\d+)_/.exec(UA)?.[1] ?? 0);
-// 아이폰에서 바깥 브라우저로 넘기는 방법
-// - 인스타그램/스레드: 앱이 스스로 지원하는 instagram://extbrowser/ (barcelona://extbrowser/) 주소를 눌러서 열어요.
-//   인스타그램이 '인스타그램 밖에서 열까요?'를 한 번 묻고, 기기의 기본 브라우저(보통 Safari)로 열어요.
-//   (2026년 3월부터 인스타그램은 x-safari- 주소를 막아요. 이 주소도 누른 순간에만 통해서 버튼으로 열어요)
-// - 그 밖의 앱: x-safari- 주소를 써요. (공식 기능이 아니라 iOS 16에서는 막혀요)
-// 넘어가지 않으면 앱의 ⋯ 메뉴로 여는 방법을 크게 보여 줘요.
-const metaScheme = isIOS && (inInstagram || inThreads) ? (inThreads ? 'barcelona' : 'instagram') : '';
-const canJumpToSafari = isIOS && (metaScheme !== '' || iosMajor !== 16);
-const appName = inKakao ? '카카오톡' : inThreads ? '스레드' : inInstagram ? '인스타그램' : '이 앱';
-
-// 앱 안 브라우저에서는 Google 로그인 버튼 대신 브라우저로 여는 방법을 보여 줘요.
-// 카카오톡은 바로 열기, 아이폰은 Safari로 열기를 시도하고, 안 되면(또는 안드로이드는) 메뉴로 여는 방법과 주소 복사를 써요.
-if (inAppBrowser) {
-  $('#inAppHint').hidden = false;
-  $('#googleSignIn').hidden = true;
-  $('#inAppText').textContent = `${appName} 안에서 연 화면에서는 Google이 로그인을 막아요. 브라우저로 열면 바로 글을 남길 수 있어요.`;
-  const open = $('#openExternal');
-  open.hidden = !(inKakao || canJumpToSafari);
-  open.textContent = inKakao ? '다른 브라우저로 열기' : 'Safari로 열기';
-  if (!isIOS) {
-    $('#inAppStep1').innerHTML = '화면 오른쪽 위 <b>⋮</b> 를 눌러요.';
-    $('#inAppStep2').innerHTML = '<b>‘다른 브라우저로 열기’</b>(또는 ‘Chrome으로 열기’)를 눌러요.';
-    $('#escapeArrow').innerHTML = '여기 <b>⋮</b> 를 눌러요 <span>↗</span>';
-  }
-  // 메뉴로 여는 방법은 처음부터 보여 줘요. (카카오톡은 바로 열기가 잘 돼서 빼요)
-  $('#inAppSteps').hidden = inKakao;
-  // 보드 위쪽에도 글을 쓰려면 브라우저로 열어야 한다고 알려 줘요.
-  $('#inAppBar').hidden = false;
-  $('#inAppBarText').textContent = '앱 안에서는 글을 못 써요.';
-  $('#inAppBarOpen').textContent = inKakao ? '다른 브라우저로 열기' : isIOS ? 'Safari로 열기' : '브라우저로 열기';
-}
-
-// 바깥 브라우저로 넘겨 보고, 1.5초 안에 화면이 넘어가지 않으면 메뉴로 여는 방법을 가리켜요.
-function showEscapeSteps() {
-  if (!$('#signin').open) askSignIn();
-  $('#inAppSteps').hidden = false;
-  $('#escapeArrow').hidden = false;
-}
-
-function openOutside() {
-  const url = location.href;
-  if (inKakao) {
-    location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(url)}`;
-    return;
-  }
-  if (!canJumpToSafari) {
-    showEscapeSteps();
-    return;
-  }
-  // 앱이 바뀌었는지 알려 주는 신호가 없어서, 화면이 가려지거나 멈췄던 흔적(타이머가 크게 늦음)으로 짐작해요.
-  let left = false;
-  const onHide = () => { if (document.hidden) left = true; };
-  const onBlur = () => { left = true; };
-  let lastTick = Date.now();
-  const drift = setInterval(() => {
-    if (Date.now() - lastTick > 900) left = true;
-    lastTick = Date.now();
-  }, 250);
-  document.addEventListener('visibilitychange', onHide);
-  window.addEventListener('pagehide', onBlur);
-  window.addEventListener('blur', onBlur);
-  const target = metaScheme
-    ? `${metaScheme}://extbrowser/?url=${encodeURIComponent(url)}`
-    : `x-safari-${url}`;
-  root.dataset.escape = target; // 어디로 넘기려 했는지 남겨요. (확인용)
-  location.href = target;
-  // 인스타그램은 '밖에서 열까요?' 창을 먼저 띄우니 넉넉히 기다려요.
-  setTimeout(() => {
-    clearInterval(drift);
-    document.removeEventListener('visibilitychange', onHide);
-    window.removeEventListener('pagehide', onBlur);
-    window.removeEventListener('blur', onBlur);
-    if (!left && !document.hidden) showEscapeSteps();
-  }, metaScheme ? 2500 : 1500);
-}
-const signin = setupDialog($('#signin'), {
-  onClose() {
-    pendingWrite = null;
-    $('#escapeArrow').hidden = true;
-  },
-});
-let pendingWrite = null;
-
-function askSignIn(next = null) {
-  pendingWrite = next;
-  $('#signinError').hidden = true;
-  signin.open();
-}
-
-function signInErrorMessage(err) {
-  const code = err?.code || '';
-  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return '';
-  if (code === 'auth/popup-blocked') return '로그인 창이 막혔어요. 브라우저에서 팝업을 허용한 뒤 다시 눌러 주세요.';
-  if (code === 'auth/unauthorized-domain') return '이 주소에서는 아직 로그인할 수 없어요. 사이트 관리자가 Firebase의 승인된 도메인에 이 주소를 추가해야 해요.';
-  if (code === 'auth/operation-not-allowed' || code === 'auth/admin-restricted-operation') {
-    return 'Google 로그인이 아직 꺼져 있어요. 사이트 관리자가 Firebase에서 Google 로그인을 켜야 해요.';
-  }
-  if (code === 'auth/network-request-failed') return '인터넷 연결을 확인하고 다시 시도해 주세요.';
-  if (code === 'auth/web-storage-unsupported' || code === 'auth/operation-not-supported-in-this-environment') {
-    return '이 브라우저에서는 로그인할 수 없어요. 크롬이나 사파리로 열어 주세요.';
-  }
-  return '로그인하지 못했어요. 잠시 후 다시 시도해 주세요.';
-}
-
-$('#googleSignIn').addEventListener('click', async (e) => {
-  const btn = e.currentTarget;
-  btn.disabled = true;
-  $('#signinError').hidden = true;
-  try {
-    // 팝업이 막히지 않게 다른 일보다 먼저 로그인 창을 열어요.
-    await state.store.signIn();
-    const next = pendingWrite;
-    signin.close();
-    toast(`${state.store.user?.name || '방문자'}님, 반가워요.`);
-    // 로그인 창을 거쳐 왔으니 손가락을 떼는 순간을 기다리지 않고 바로 커서를 둬요.
-    if (next) startWriting({ ...next, deferFocus: false });
-  } catch (err) {
-    // 사용자가 로그인 창을 닫은 경우에는 아무 말도 하지 않아요.
-    const message = signInErrorMessage(err);
-    if (message) {
-      $('#signinError').textContent = message;
-      $('#signinError').hidden = false;
-      console.warn(err);
-    }
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-$('#openExternal').addEventListener('click', openOutside);
-$('#inAppBarOpen').addEventListener('click', openOutside);
-$('#inAppBarClose').addEventListener('click', () => { $('#inAppBar').hidden = true; });
-
-// 앱 안 브라우저는 클립보드 API를 막기도 해서, 예전 방식으로 한 번 더 시도해요.
-$('#copyLink').addEventListener('click', async (e) => {
-  const btn = e.currentTarget;
-  const url = location.href;
-  let copied = false;
-  try {
-    await navigator.clipboard.writeText(url);
-    copied = true;
-  } catch {
-    const field = Object.assign(document.createElement('textarea'), { value: url });
-    field.setAttribute('readonly', '');
-    field.style.position = 'fixed';
-    field.style.opacity = '0';
-    btn.after(field);
-    field.select();
-    copied = document.execCommand('copy');
-    field.remove();
-  }
-  btn.textContent = copied ? '주소를 복사했어요' : '직접 복사해 주세요';
-  if (!copied) $('#inAppTip').textContent = url;
-  setTimeout(() => { btn.textContent = '주소 복사'; }, 2500);
-});
-
-// ---------- 프로필: 닉네임, 화면 설정, 로그아웃 ----------
-function renderAccount() {
-  const btn = $('#accountBtn');
-  const user = state.store?.user;
-  btn.classList.toggle('is-signed-in', !!user);
-  if (user) {
-    const label = state.store.author || user.email || '내 계정';
-    btn.textContent = [...label.trim()][0]?.toUpperCase() ?? '나';
-    btn.setAttribute('aria-label', `${label} 계정, 닉네임·화면 설정과 로그아웃`);
-    btn.title = label;
-  } else {
-    btn.textContent = '로그인';
-    btn.setAttribute('aria-label', 'Google로 로그인');
-    btn.removeAttribute('title');
-  }
-}
-
+// ---------- 설정: 닉네임, 화면, 내 ID ----------
 const profile = setupDialog($('#profile'));
 
 // ---------- 지금 보는 사람 ----------
@@ -714,7 +552,7 @@ function renderViewers() {
   if (who.anonymous) {
     rows.push(whoRow({
       name: who.anonymous === 1 ? '익명' : `익명 ${who.anonymous}명`,
-      sub: '로그인하지 않은 방문자',
+      sub: '닉네임을 정하지 않은 방문자',
       anon: true,
     }));
   }
@@ -738,22 +576,33 @@ $('#liveChip').addEventListener('click', () => {
 
 $('#accountBtn').addEventListener('click', () => {
   if (!state.store) return;
-  if (!state.store.user) {
-    askSignIn();
-    return;
-  }
   const theme = pref(PREF_THEME) ?? 'auto';
   for (const r of document.querySelectorAll('input[name="theme"]')) r.checked = r.value === theme;
-  $('#nickInput').value = state.store.user.nickname;
-  $('#nickInput').placeholder = state.store.user.name || '방문자';
+  $('#nickInput').value = state.store.user?.nickname ?? '';
+  $('#nickInput').placeholder = '익명';
+  $('#myUid').textContent = state.store.uid ?? '아직 없어요';
+  $('#copyUid').disabled = !state.store.uid;
   profile.open();
+});
+
+$('#copyUid').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  try {
+    await navigator.clipboard.writeText(state.store.uid);
+    btn.textContent = '복사했어요';
+  } catch {
+    // 클립보드를 못 쓰면 글자를 골라 두어서 직접 복사하게 해요.
+    getSelection().selectAllChildren($('#myUid'));
+    btn.textContent = '직접 복사해 주세요';
+  }
+  setTimeout(() => { btn.textContent = '복사'; }, 2000);
 });
 
 $('#nickForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const input = $('#nickInput');
   const name = input.value.trim();
-  if (name === state.store.user.nickname) {
+  if (name === (state.store.user?.nickname ?? '')) {
     profile.close();
     return;
   }
@@ -762,21 +611,11 @@ $('#nickForm').addEventListener('submit', async (e) => {
   try {
     await state.store.setNickname(name);
     profile.close();
-    toast(name ? `이제 '${name}'(으)로 글을 남겨요.` : 'Google 계정 이름으로 글을 남겨요.');
+    toast(name ? `이제 '${name}'(으)로 글을 남겨요.` : '이제 익명으로 글을 남겨요.');
   } catch (err) {
     toast(errorMessage(err, '닉네임을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.'), { tone: 'error' });
   } finally {
     btn.disabled = false;
-  }
-});
-
-$('#signOutBtn').addEventListener('click', async () => {
-  try {
-    await state.store.signOut();
-    profile.close();
-    toast('로그아웃했어요.');
-  } catch {
-    toast('로그아웃하지 못했어요. 잠시 후 다시 시도해 주세요.', { tone: 'error' });
   }
 });
 
@@ -787,12 +626,12 @@ $('#profile').addEventListener('change', (e) => {
   applyTheme(v);
 });
 
-// 로그인하거나 로그아웃하면 '내 글' 표시와 옮기기 권한을 다시 그려요.
+// 익명 계정이 준비되면 '내 글' 표시와 옮기기 권한을 다시 그려요.
 function onAuthChanged() {
   if (!state.store.user) writer.cancel();
+  document.body.classList.toggle('can-write', !!state.store.user);
   board.setNotes(state.notes, boardCtx());
   selection.refresh();
-  renderAccount();
   $('#adminChip').hidden = !state.store.isAdmin;
 }
 
@@ -832,7 +671,7 @@ if (state.store) {
     onPick: goTo,
   });
   $('#adminChip').hidden = !state.store.isAdmin;
-  renderAccount();
+  document.body.classList.toggle('can-write', !!state.store.user);
   state.store.onAuthChange(onAuthChanged);
   state.store.watchPresence(onPresence, config.presence);
   const start = routeKey();

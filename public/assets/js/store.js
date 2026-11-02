@@ -1,12 +1,13 @@
-// 저장소: Firebase Firestore에 글을 저장하고, Google 로그인으로 '내 글'을 구분해요.
-// 보드는 로그인 없이도 볼 수 있고, 실시간으로 구독해서 다른 방문자가 남기거나 옮긴 글이 바로 보여요.
+// 저장소: Firebase Firestore에 글을 저장해요. 로그인 화면은 없고, 브라우저마다 익명 계정을
+// 몰래 만들어서(Firebase 익명 로그인) 그 id로 '내 글'을 구분해요.
+// 보드는 실시간으로 구독해서 다른 방문자가 남기거나 옮긴 글이 바로 보여요.
 //
 // 컬렉션 구조
 //   notes/{id}   보드에 붙은 글 (작은 사진 포함)
 //   images/{id}  크게 보기용 사진 (글을 눌렀을 때만 불러와요)
-//   admins/{uid} 관리자 표시용 문서 (Firebase 콘솔에서 직접 만들어요)
+//   admins/{uid} 관리자 표시용 문서 (설정 창의 '내 ID'로 Firebase 콘솔에서 직접 만들어요)
 //   profiles/{uid} 내 닉네임 (프로필 창에서 바꿔요)
-//   presence/{id}  지금 보는 사람. 브라우저마다 하나, 마지막으로 본 시각 (+ 로그인했으면 uid와 이름)
+//   presence/{id}  지금 보는 사람. 브라우저마다 하나, 마지막으로 본 시각과 익명 id (+ 닉네임)
 
 import { accountAuthor } from './notes.js';
 
@@ -21,9 +22,9 @@ export async function createStore(config) {
   ]);
 
   const app = initializeApp(config.firebase);
+  // 로그인 창(팝업)은 없어서 익명 계정만 이 브라우저에 저장해요.
   const auth = A.initializeAuth(app, {
     persistence: [A.indexedDBLocalPersistence, A.browserLocalPersistence],
-    popupRedirectResolver: A.browserPopupRedirectResolver,
   });
   const db = F.initializeFirestore(app, {});
   if (config.emulator) {
@@ -32,11 +33,8 @@ export async function createStore(config) {
     F.connectFirestoreEmulator(db, host, firestorePort);
   }
 
-  const provider = new A.GoogleAuthProvider();
-  provider.setCustomParameters({ prompt: 'select_account' });
-
-  // 로그인 상태가 바뀌면 관리자인지, 닉네임이 있는지도 확인하고 화면에 알려요.
-  const session = { user: null, isAdmin: false };
+  // 익명 계정이 준비되면 관리자인지, 닉네임이 있는지도 확인하고 화면에 알려요.
+  const session = { user: null, isAdmin: false, error: null };
   const profileRef = (uid) => F.doc(db, 'profiles', uid);
   const listeners = new Set();
   let ticket = 0;
@@ -55,14 +53,30 @@ export async function createStore(config) {
       if (profile.status === 'fulfilled' && profile.value.exists()) nickname = profile.value.get('name') || '';
     }
     if (my !== ticket) return;
-    session.user = user ? { uid: user.uid, name: user.displayName || '', email: user.email || '', nickname } : null;
+    session.user = user ? { uid: user.uid, nickname } : null;
     session.isAdmin = isAdmin;
     settle();
     for (const fn of listeners) fn();
   });
   await firstState;
 
-  // 로그인/로그아웃 뒤 관리자 확인까지 끝나서 화면에 반영될 때까지 기다려요.
+  // 처음 온 브라우저는 익명 계정을 만들어요. (한 번 만들면 이 브라우저에 남아서 다음에도 같은 '나'예요)
+  // 기다리지 않고 보드를 먼저 보여 줘요. 글을 쓸 때 ready()로 기다려요.
+  let signing = null;
+  function ensureUser() {
+    if (session.user) return Promise.resolve(session.user);
+    signing ??= A.signInAnonymously(auth)
+      .then(({ user }) => untilSession((s) => s.user?.uid === user.uid).then(() => session.user))
+      .catch((err) => {
+        session.error = err;
+        signing = null;
+        throw err;
+      });
+    return signing;
+  }
+  ensureUser().catch((err) => console.warn('익명 계정을 만들지 못했어요.', err));
+
+  // 익명 계정이 생기고 관리자 확인까지 끝나서 화면에 반영될 때까지 기다려요.
   function untilSession(test) {
     if (test(session)) return Promise.resolve();
     return new Promise((resolve) => {
@@ -133,12 +147,13 @@ export async function createStore(config) {
     get uid() {
       return session.user?.uid ?? null;
     },
-    // 새 글에 붙는 이름: 닉네임, 없으면 Google 계정 이름 (보안 규칙의 authorName()과 같아요)
+    // 새 글에 붙는 이름: 닉네임, 없으면 '익명' (보안 규칙의 authorName()과 같아요)
     get author() {
-      return session.user ? accountAuthor(session.user.nickname || session.user.name) : '';
+      return accountAuthor(session.user?.nickname);
     },
-    // 빈 이름이면 닉네임을 지우고 Google 계정 이름으로 돌아가요.
+    // 빈 이름이면 닉네임을 지우고 '익명'으로 돌아가요.
     async setNickname(name) {
+      await ensureUser();
       const nickname = name.trim();
       if (nickname) await F.setDoc(profileRef(session.user.uid), { name: nickname, updatedAt: F.serverTimestamp() });
       else await F.deleteDoc(profileRef(session.user.uid));
@@ -155,15 +170,9 @@ export async function createStore(config) {
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
-    // 팝업이 막히지 않게 버튼을 누른 바로 그 순간에 불러야 해요. (await 전에 팝업을 열어요)
-    async signIn() {
-      const { user } = await A.signInWithPopup(auth, provider);
-      await untilSession((s) => s.user?.uid === user.uid);
-      return session.user;
-    },
-    async signOut() {
-      await A.signOut(auth);
-      await untilSession((s) => !s.user);
+    // 글을 쓰기 전에 익명 계정이 준비될 때까지 기다려요. (못 만들면 오류를 던져요)
+    ready() {
+      return ensureUser();
     },
 
     subscribeDay(date, onNotes, onError) {
@@ -184,7 +193,7 @@ export async function createStore(config) {
       const batch = F.writeBatch(db);
       const note = {
         ...data,
-        author: accountAuthor(session.user.nickname || session.user.name),
+        author: accountAuthor(session.user.nickname),
         ownerId: session.user.uid,
         createdAt: F.serverTimestamp(),
         updatedAt: F.serverTimestamp(),
@@ -255,7 +264,7 @@ export async function createStore(config) {
     // 지금 보는 사람 수: 화면을 보고 있는 동안 every마다 '여기 있어요'를 남기고,
     // 최근 window 안에 남긴 브라우저 수를 세요. (세기는 1번 읽기로 끝나서 사람이 많아도 싸요)
     // 지금 보는 사람: 실시간으로 구독해서 들어오고 나가는 순간 바로 알려 줘요.
-    // - 화면을 보면 presence/{브라우저 id}에 서버 시각(+ 로그인했으면 uid와 이름)을 남겨요.
+    // - 화면을 보면 presence/{브라우저 id}에 서버 시각과 익명 id(+ 닉네임)를 남겨요.
     // - 다른 앱/탭으로 가거나 창을 닫으면 바로 지워요. (그래서 나갈 때도 곧바로 반영돼요)
     // - 지우지 못하고 꺼진 경우(강제 종료 등)를 위해 every마다 다시 남기고, window 안에 남긴 기록만 세요.
     watchPresence(onChange, { every = 300_000, window: recent = 390_000 } = {}) {
@@ -268,7 +277,7 @@ export async function createStore(config) {
       }
       const ref = F.doc(db, 'presence', id);
       const col = F.collection(db, 'presence');
-      const myName = () => accountAuthor(session.user.nickname || session.user.name);
+      const myName = () => accountAuthor(session.user.nickname);
       let docs = [];
       let skew = 0; // 서버 시각 - 내 기기 시각 (기기 시계가 틀려도 바르게 세려고요)
       let wroteAt = 0;
@@ -280,18 +289,21 @@ export async function createStore(config) {
         const cutoff = Date.now() + skew - recent;
         // 목록(people, anonymous)에는 나를 빼요. 같은 계정으로 연 다른 기기도 나예요.
         // total은 나까지 센 수예요. (내 기록이 아직 반영 전이어도 나는 세요)
+        // 닉네임을 정한 사람은 이름으로, 나머지는 익명으로 세요. 같은 익명 id(여러 탭)는 한 사람이에요.
         const named = new Map();
-        let anonymous = 0;
+        const nameless = new Set();
         const me = session.user?.uid;
         for (const d of docs) {
-          if (d.id === id || d.seen < cutoff) continue;
+          if (d.id === id || d.seen < cutoff || (me && d.uid === me)) continue;
           if (d.uid && d.name) {
-            if (d.uid !== me && !named.has(d.uid)) named.set(d.uid, { uid: d.uid, name: d.name });
+            if (!named.has(d.uid)) named.set(d.uid, { uid: d.uid, name: d.name });
           } else {
-            anonymous += 1;
+            nameless.add(d.uid || d.id);
           }
         }
+        for (const uid of named.keys()) nameless.delete(uid);
         const people = [...named.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+        const anonymous = nameless.size;
         onChange({ people, anonymous, total: people.length + anonymous + 1 });
       };
 
@@ -299,9 +311,9 @@ export async function createStore(config) {
         clearTimeout(beat);
         if (document.hidden) return;
         beat = setTimeout(write, every);
-        const mark = session.user
-          ? { seen: F.serverTimestamp(), uid: session.user.uid, name: myName() }
-          : { seen: F.serverTimestamp() };
+        const mark = !session.user ? { seen: F.serverTimestamp() }
+          : session.user.nickname ? { seen: F.serverTimestamp(), uid: session.user.uid, name: myName() }
+            : { seen: F.serverTimestamp(), uid: session.user.uid };
         wroteAt = Date.now();
         try {
           await F.setDoc(ref, mark);
@@ -355,8 +367,8 @@ export async function createStore(config) {
         unsub = null;
       };
 
-      // 로그인/로그아웃하거나 닉네임을 바꾸면 바로 다시 남겨요.
-      const who = () => (session.user ? `${session.user.uid}:${session.user.nickname}:${session.user.name}` : '');
+      // 익명 계정이 생기거나 닉네임을 바꾸면 바로 다시 남겨요.
+      const who = () => (session.user ? `${session.user.uid}:${session.user.nickname}` : '');
       let last = who();
       const onAuth = () => {
         if (who() === last) return;

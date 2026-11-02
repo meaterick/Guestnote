@@ -21,8 +21,8 @@ export const TINTS = [
 
 export const LIMITS = { author: 20, text: 500 };
 
-// 로그인한 계정 이름만 사용해요. 이름이 없으면 이메일 대신 공통 이름을 보여 줘요.
-export const accountAuthor = (name = '') => (name.trim() || '방문자').slice(0, LIMITS.author);
+// 작성자 이름: 닉네임을 정했으면 닉네임, 아니면 '익명'이에요. (보안 규칙의 authorName()과 같아요)
+export const accountAuthor = (name = '') => ((name || '').trim() || '익명').slice(0, LIMITS.author);
 
 export function photoRatio(note) {
   const r = note.imgW && note.imgH ? note.imgW / note.imgH : 4 / 3;

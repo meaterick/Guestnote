@@ -22,14 +22,14 @@ const THUMB = bytes(4000);
 const FULL = bytes(100000, 2);
 
 let env;
-// Google로 로그인한 방문자. provider를 바꾸면 다른 로그인 방식도 흉내 낼 수 있어요.
-const as = (uid, provider = 'google.com') => (uid
-  ? env.authenticatedContext(uid, { name: uid === 'alice' ? '앨리스' : uid, firebase: { sign_in_provider: provider } })
+// 화면이 몰래 만든 익명 계정의 방문자. provider를 바꾸면 예전 Google 로그인도 흉내 낼 수 있어요.
+const as = (uid, provider = 'anonymous') => (uid
+  ? env.authenticatedContext(uid, { firebase: { sign_in_provider: provider } })
   : env.unauthenticatedContext()).firestore();
 
 function note(over = {}) {
   return {
-    date: TODAY, type: 'text', author: '앨리스', text: '안녕하세요', color: 'sky',
+    date: TODAY, type: 'text', author: '익명', text: '안녕하세요', color: 'sky',
     x: 100, y: 200, z: 1, rot: 1.5, ownerId: 'alice',
     createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...over,
   };
@@ -60,21 +60,22 @@ test('누구나 글을 읽고 날짜별로 셀 수 있어요', async () => {
   await assertSucceeds(getCountFromServer(query(collection(as(null), 'notes'), where('date', '==', YESTERDAY))));
 });
 
-test('로그인한 방문자는 오늘 보드에 글을 남길 수 있어요', async () => {
+test('익명 계정의 방문자는 오늘 보드에 글을 남길 수 있어요', async () => {
   await assertSucceeds(setDoc(doc(as('alice'), 'notes/n1'), note()));
   await assertSucceeds(setDoc(doc(as('alice'), 'notes/n2'), note({ type: 'memo', text: '메모', color: 'clear', x: 0, y: 0, z: 0, rot: -8 })));
 });
 
-test('로그인하지 않으면 글을 남길 수 없어요', async () => {
+test('익명 계정조차 없으면 글을 남길 수 없어요', async () => {
   await assertFails(setDoc(doc(as(null), 'notes/n1'), note()));
 });
 
-test('Google이 아닌 방식(익명 등)으로 로그인하면 글을 남길 수 없어요', async () => {
-  await assertFails(setDoc(doc(as('alice', 'anonymous'), 'notes/n1'), note()));
-  await assertFails(setDoc(doc(as('alice', 'password'), 'notes/n2'), note()));
+test('예전에 Google로 로그인해 둔 브라우저도 그대로 쓰고, 이름은 똑같이 익명이에요', async () => {
+  const google = env.authenticatedContext('alice', { name: '앨리스', firebase: { sign_in_provider: 'google.com' } }).firestore();
+  await assertSucceeds(setDoc(doc(google, 'notes/n1'), note()));
+  await assertFails(setDoc(doc(google, 'notes/n2'), note({ author: '앨리스' })));
   await seed('notes/n3', seeded());
-  await assertFails(updateDoc(doc(as('alice', 'anonymous'), 'notes/n3'), { x: 300, updatedAt: serverTimestamp() }));
-  await assertFails(deleteDoc(doc(as('alice', 'anonymous'), 'notes/n3')));
+  await assertSucceeds(updateDoc(doc(google, 'notes/n3'), { x: 300, updatedAt: serverTimestamp() }));
+  await assertSucceeds(deleteDoc(doc(google, 'notes/n3')));
 });
 
 test('다른 사람 이름(ownerId)으로는 남길 수 없어요', async () => {
@@ -90,25 +91,20 @@ test('닉네임은 본인만 정하고, 정하면 새 글의 작성자는 닉네
   await assertSucceeds(nick('별빛'));
   await assertSucceeds(getDoc(doc(db, 'profiles/alice')));
   await assertFails(getDoc(doc(as('bob'), 'profiles/alice')));
-  await assertFails(setDoc(doc(db, 'notes/old-name'), note({ author: '앨리스' })));
+  await assertFails(setDoc(doc(db, 'notes/old-name'), note({ author: '익명' })));
   await assertSucceeds(setDoc(doc(db, 'notes/nick'), note({ author: '별빛' })));
-  await assertFails(updateDoc(doc(db, 'notes/nick'), { author: '앨리스', updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(db, 'notes/nick'), { author: '익명', updatedAt: serverTimestamp() }));
   await assertSucceeds(deleteDoc(doc(db, 'profiles/alice')));
-  await assertSucceeds(setDoc(doc(db, 'notes/back'), note({ author: '앨리스' })));
+  await assertSucceeds(setDoc(doc(db, 'notes/back'), note({ author: '익명' })));
 });
 
-test('작성자는 계정 이름만 사용하고, 저장한 이름은 본인도 바꿀 수 없어요', async () => {
+test('닉네임이 없으면 작성자는 익명이고, 저장한 이름은 본인도 바꿀 수 없어요', async () => {
   const db = as('alice');
   await assertFails(setDoc(doc(db, 'notes/forged'), note({ author: '다른 이름' })));
+  await assertFails(setDoc(doc(db, 'notes/visitor'), note({ author: '방문자' })));
   await seed('notes/legacy', seeded({ author: '이전에 적은 이름' }));
   await assertSucceeds(updateDoc(doc(db, 'notes/legacy'), { text: '내용만 고쳐요', updatedAt: serverTimestamp() }));
-  await assertFails(updateDoc(doc(db, 'notes/legacy'), { author: '앨리스', updatedAt: serverTimestamp() }));
-  for (const [i, name] of [undefined, '', '   ', '  앨리스  ', '가'.repeat(21), '😀'.repeat(21)].entries()) {
-    const ctx = env.authenticatedContext('alice', { ...(name === undefined ? {} : { name }), firebase: { sign_in_provider: 'google.com' } });
-    const author = (name?.trim() || '방문자').slice(0, 20);
-    await assertSucceeds(setDoc(doc(ctx.firestore(), `notes/name${i}`), note({ author })))
-      .catch((err) => { throw new Error(`계정 이름 사례 ${i}: ${JSON.stringify(name)}`, { cause: err }); });
-  }
+  await assertFails(updateDoc(doc(db, 'notes/legacy'), { author: '익명', updatedAt: serverTimestamp() }));
 });
 
 test('어제나 내일 보드에는 남길 수 없어요', async () => {
@@ -304,9 +300,10 @@ test('지금 보는 사람 표시는 누구나 남기고 셀 수 있지만, 시�
   await assertSucceeds(deleteDoc(doc(guest, `presence/${id}`)));
 });
 
-test('지금 보는 사람에 이름은 로그인한 본인 것만, 글에 붙는 이름 그대로 남길 수 있어요', async () => {
+test('지금 보는 사람에는 내 익명 id와, 닉네임을 정했으면 그 이름만 남길 수 있어요', async () => {
   const id = 'abcdefghij0123456789';
   const alice = as('alice');
+  await setDoc(doc(as('alice'), 'profiles/alice'), { name: '앨리스', updatedAt: serverTimestamp() });
   const mark = (db, over = {}) => setDoc(doc(db, `presence/${id}`), { seen: serverTimestamp(), uid: 'alice', name: '앨리스', ...over });
   await assertSucceeds(mark(alice));
   await assertSucceeds(getDocs(query(collection(as(null), 'presence'), where('seen', '>', Timestamp.fromMillis(Date.now() - 90_000)))));
@@ -315,7 +312,9 @@ test('지금 보는 사람에 이름은 로그인한 본인 것만, 글에 붙�
   await assertFails(mark(as('bob'), { uid: 'bob' }));
   await assertFails(mark(alice, { name: '관리자' }));
   await assertFails(mark(alice, { extra: 1 }));
-  await assertFails(mark(as('alice', 'anonymous')));
+  // 이름 없이 내 id만 남기는 건 언제나 돼요. (닉네임을 정하지 않은 익명 방문자)
+  await assertSucceeds(setDoc(doc(alice, `presence/${id}`), { seen: serverTimestamp(), uid: 'alice' }));
+  await assertFails(setDoc(doc(as(null), `presence/${id}`), { seen: serverTimestamp(), uid: 'alice' }));
   await setDoc(doc(alice, 'profiles/alice'), { name: '별빛', updatedAt: serverTimestamp() });
   await assertFails(mark(alice));
   await assertSucceeds(mark(alice, { name: '별빛' }));

@@ -396,27 +396,9 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
 }
 @keyframes live { 70% { box-shadow: 0 0 0 6px rgb(34 179 107 / 0); } 100% { box-shadow: 0 0 0 0 rgb(34 179 107 / 0); } }
 
-/* 로그인 전에는 '로그인' 글자, 로그인하면 이름 첫 글자를 담은 동그라미 */
-.account-btn {
-  min-width: 38px;
-  height: 34px;
-  padding: 0 14px;
-  border: 1px solid var(--glass-edge-low);
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-size: 13.5px;
-  white-space: nowrap;
-}
-.account-btn:hover { filter: brightness(1.07); }
-.account-btn.is-signed-in {
-  width: 34px;
-  min-width: 34px;
-  padding: 0;
-  background: var(--accent-soft);
-  color: var(--ink);
-  font-size: 15px;
-}
+/* 설정 버튼 (닉네임·화면·내 ID) */
+.account-btn { border: 1px solid var(--glass-edge-low); background: var(--soft-fill); }
+.account-btn svg { width: 20px; height: 20px; }
 
 /* ---------- 보드 ---------- */
 .viewport {
@@ -1004,7 +986,11 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
   margin: calc(env(safe-area-inset-top) + 76px) 12px auto auto;
 }
 .modal--menu::backdrop { background: rgb(16 20 44 / 0.12); -webkit-backdrop-filter: none; backdrop-filter: none; }
-.profile__out { width: 100%; margin-top: 16px; }
+.profile__id { margin-top: 16px; font-size: 13.5px; color: var(--ink-2); }
+.profile__id summary { cursor: pointer; }
+.profile__id p { margin: 8px 0; line-height: 1.6; }
+.profile__id-row { display: flex; align-items: center; gap: 8px; }
+.profile__id-row code { flex: 1; min-width: 0; overflow-wrap: anywhere; padding: 6px 10px; border-radius: 10px; background: var(--soft-fill); font-size: 12.5px; user-select: all; }
 .nick { margin: 0 0 16px; }
 .nick__label { margin: 0 0 6px; font-size: 13.5px; color: var(--ink-2); }
 .nick__row { display: flex; gap: 8px; }
@@ -1052,80 +1038,6 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
 }
 .viewer__close:hover:not(:disabled) { background: var(--glass-fill-strong); filter: brightness(1.05); }
 
-/* ---------- 로그인 ---------- */
-.modal--small { width: min(420px, calc(100vw - 24px)); }
-.signin__lead { margin: 0 0 8px; font-size: 15.5px; line-height: 1.65; }
-.signin__note { margin: 0 0 16px; font-size: 13.5px; line-height: 1.6; color: var(--ink-3); }
-.signin__inapp {
-  margin: 0 0 14px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: oklch(0.93 0.08 85 / 0.7);
-  color: #4a3a05;
-  font-size: 14px;
-  line-height: 1.6;
-}
-.signin__inapp p { margin: 0 0 10px; }
-.signin__inapp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-.signin__inapp .signin__inapp-tip { margin: 0; font-size: 13px; }
-.signin__inapp-tip:empty { display: none; }
-.signin__steps { margin: 10px 0 0; padding-left: 22px; font-size: 14.5px; line-height: 1.7; }
-.signin__steps b { font-size: 1.05em; }
-
-/* 앱 안 브라우저 메뉴(오른쪽 위 ⋯)를 가리키는 표시 */
-.escape-arrow {
-  position: fixed;
-  top: calc(env(safe-area-inset-top) + 10px);
-  right: 14px;
-  margin: 0;
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: oklch(0.93 0.08 85);
-  color: #4a3a05;
-  font-size: 15px;
-  box-shadow: var(--shadow-2);
-  animation: nudge 1s ease-in-out infinite;
-}
-.escape-arrow span { display: inline-block; margin-left: 4px; font-size: 18px; }
-@keyframes nudge { 50% { translate: 4px -4px; } }
-
-.inapp-bar {
-  position: fixed;
-  z-index: 29;
-  top: calc(env(safe-area-inset-top) + 86px);
-  left: 50%;
-  translate: -50% 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: max-content;
-  max-width: calc(100vw - 16px);
-  padding: 6px 4px 6px 14px;
-  border-radius: 999px;
-  font-size: 13.5px;
-}
-.inapp-bar__text { min-width: 0; }
-.inapp-bar__close { width: 30px; height: 30px; flex: none; }
-.inapp-bar__close svg { width: 16px; height: 16px; }
-
-.google-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  width: 100%;
-  padding: 13px 18px;
-  border: 1px solid #dadce0;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #1f1f1f;
-  font-size: 16px;
-  box-shadow: 0 1px 2px rgb(30 36 64 / 0.12);
-}
-.google-btn:hover:not(:disabled) { background: #f7f8fa; }
-.google-btn:disabled { opacity: 0.6; cursor: progress; }
-.google-btn__logo { width: 20px; height: 20px; stroke: none; }
-
 /* ---------- 글이 아주 많은 보드 / 접근성 ---------- */
 .lite .note--memo {
   -webkit-backdrop-filter: none;
@@ -1164,8 +1076,7 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
   .daynav__main { font-size: 30px; }
   .icon-btn { width: 36px; height: 36px; }
   .chip, button.chip--live { padding: 5px 9px; font-size: 12px; }
-  .account-btn { height: 32px; padding: 0 11px; font-size: 12.5px; }
-  .account-btn.is-signed-in { width: 32px; min-width: 32px; }
+  .account-btn { width: 34px; height: 34px; }
 
   :root { --dock-bottom: max(calc(env(safe-area-inset-bottom) + 14px), calc(var(--kb, 0px) + 8px)); }
   /* 안내 한 줄과 도구 막대 사이에 작은 간격을 남겨요. 글쓰는 중에는 안내가 숨겨져요. */

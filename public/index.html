@@ -18,10 +18,9 @@
   <meta property="og:locale" content="ko_KR">
   <meta name="twitter:card" content="summary_large_image">
   <!-- 사용자 글은 textContent로만 그려요. 아래 정책은 혹시 모를 스크립트 삽입을 한 번 더 막아 줘요.
-       Firebase(구글 API, Google 로그인 창)와 개발용 에뮬레이터, 구글 글꼴만 허용해요.
-       Google 로그인 스크립트가 가끔 보내는 상태 확인 요청(apis.google.com → www.google.com)과
+       Firebase(구글 API)와 개발용 에뮬레이터, 구글 글꼴만 허용해요.
        Firestore의 연결 확인 이미지(www.google.com/images/cleardot.gif)도 막히지 않게 열어 두었어요. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://www.google.com; connect-src 'self' https://*.googleapis.com https://apis.google.com https://www.google.com http://127.0.0.1:* http://localhost:*; frame-src https://*.firebaseapp.com https://*.web.app https://accounts.google.com http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://www.google.com; connect-src 'self' https://*.googleapis.com https://www.google.com http://127.0.0.1:* http://localhost:*; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -33,6 +32,7 @@
   <svg class="sprite" aria-hidden="true" focusable="false">
     <symbol id="i-left" viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5"/></symbol>
     <symbol id="i-right" viewBox="0 0 24 24"><path d="M9.5 5.5 16 12l-6.5 6.5"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
     <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4.5 19.5l1-4.2L15.8 5a2.1 2.1 0 0 1 3 0l.2.2a2.1 2.1 0 0 1 0 3L8.7 18.5z"/><path d="M13.8 7l3.2 3.2"/></symbol>
     <symbol id="i-photo" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M20.5 15.5l-4.6-4.3-7.4 7.8"/></symbol>
@@ -70,16 +70,9 @@
       <button class="chip chip--live" id="liveChip" type="button" hidden aria-haspopup="dialog" title="누가 보고 있는지 봐요"><i class="live-dot" aria-hidden="true"></i><span><span id="liveCount"></span><span class="live-label">명 보는 중</span></span></button>
       <span class="chip chip--quiet" id="resetChip" title="보드는 매일 자정에 새로 열려요"></span>
       <button class="chip chip--today" id="todayBtn" type="button" hidden>오늘 보드로</button>
-      <button class="account-btn" id="accountBtn" type="button">로그인</button>
+      <button class="icon-btn account-btn" id="accountBtn" type="button" aria-label="설정: 닉네임과 화면" title="설정"><svg><use href="#i-gear"/></svg></button>
     </div>
   </header>
-
-  <!-- 카카오톡·인스타그램 같은 앱 안 브라우저에서만 보여요 -->
-  <div class="inapp-bar glass" id="inAppBar" hidden>
-    <span class="inapp-bar__text" id="inAppBarText"></span>
-    <button class="btn btn--small btn--primary" id="inAppBarOpen" type="button"></button>
-    <button class="icon-btn inapp-bar__close" id="inAppBarClose" type="button" aria-label="안내 닫기"><svg><use href="#i-close"/></svg></button>
-  </div>
 
   <main class="viewport" id="viewport" aria-label="방명록 보드" aria-describedby="boardHelp">
     <p class="sr-only" id="boardHelp">보드를 끌거나 휠을 굴려 둘러볼 수 있어요. Ctrl과 휠, 또는 두 손가락으로 확대하고 줄여요. 빈 곳을 두 번 누르거나 N 키를 누르면 그 자리에 바로 글을 쓰고, Enter로 올려요. 줄은 Shift+Enter로 바꿔요. 글은 Tab으로 차례대로 가서 Enter로 고르고, 내 글은 화살표 키로 옮겨요.</p>
@@ -169,43 +162,7 @@
     </section>
   </dialog>
 
-  <!-- Google 로그인 -->
-  <dialog class="modal modal--small" id="signin" aria-labelledby="signinTitle">
-    <section class="panel glass signin">
-      <header class="panel__head">
-        <h2 class="panel__title" id="signinTitle">로그인하고 남기기</h2>
-        <button class="icon-btn" type="button" data-close aria-label="닫기"><svg><use href="#i-close"/></svg></button>
-      </header>
-      <p class="signin__lead">글을 남기고 내 글을 옮기려면 Google 계정으로 로그인해 주세요. 보드는 로그인하지 않아도 볼 수 있어요.</p>
-      <p class="signin__note">이메일과 프로필 사진은 보드에 나오지 않아요. 작성자는 Google 계정 이름으로 표시되고, 로그인한 뒤 프로필에서 닉네임으로 바꿀 수 있어요.</p>
-      <div class="signin__inapp" id="inAppHint" hidden>
-        <p id="inAppText"></p>
-        <div class="signin__inapp-actions">
-          <button class="btn btn--primary" id="openExternal" type="button" hidden>다른 브라우저로 열기</button>
-          <button class="btn" id="copyLink" type="button">주소 복사</button>
-        </div>
-        <p class="signin__inapp-tip" id="inAppTip"></p>
-        <ol class="signin__steps" id="inAppSteps" hidden>
-          <li id="inAppStep1">화면 오른쪽 위 <b>⋯</b> 를 눌러요.</li>
-          <li id="inAppStep2"><b>‘외부 브라우저에서 열기’</b>(또는 ‘Safari에서 열기’)를 눌러요.</li>
-        </ol>
-      </div>
-      <p class="form-error" id="signinError" role="alert" hidden></p>
-      <button class="google-btn" id="googleSignIn" type="button">
-        <svg class="google-btn__logo" viewBox="0 0 48 48" aria-hidden="true">
-          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-        </svg>
-        <span>Google로 로그인</span>
-      </button>
-    </section>
-    <!-- 패널(유리 효과) 바깥에 둬야 화면 오른쪽 위에 붙어요 -->
-    <p class="escape-arrow" id="escapeArrow" hidden aria-hidden="true">여기 <b>⋯</b> 를 눌러요 <span>↗</span></p>
-  </dialog>
-
-  <!-- 지금 보는 사람: 로그인한 사람은 이름, 나머지는 익명 -->
+  <!-- 지금 보는 사람: 닉네임을 정한 사람은 이름, 나머지는 익명 -->
   <dialog class="modal modal--menu" id="viewers" aria-labelledby="viewersTitle">
     <section class="panel glass viewers">
       <header class="panel__head">
@@ -217,7 +174,7 @@
     </section>
   </dialog>
 
-  <!-- 프로필: 닉네임, 화면 설정, 로그아웃 -->
+  <!-- 설정: 닉네임, 화면, 내 ID -->
   <dialog class="modal modal--menu" id="profile" aria-labelledby="profileTitle">
     <section class="panel glass profile">
       <header class="panel__head">
@@ -230,7 +187,7 @@
           <input class="nick__input" id="nickInput" maxlength="20" autocomplete="nickname" enterkeyhint="done">
           <button class="btn btn--small btn--primary" id="nickSave" type="submit">저장</button>
         </div>
-        <p class="nick__hint" id="nickHint">새로 쓰는 글부터 이 이름으로 보여요. 비우면 Google 계정 이름을 써요.</p>
+        <p class="nick__hint" id="nickHint">새로 쓰는 글부터 이 이름으로 보여요. 비우면 '익명'으로 남겨요.</p>
       </form>
       <p class="nick__label">화면</p>
       <div class="seg seg--small" role="radiogroup" aria-label="밝기">
@@ -238,7 +195,11 @@
         <label class="seg__item"><input type="radio" name="theme" value="light"><span>밝게</span></label>
         <label class="seg__item"><input type="radio" name="theme" value="dark"><span>어둡게</span></label>
       </div>
-      <button class="btn profile__out" id="signOutBtn" type="button">로그아웃</button>
+      <details class="profile__id">
+        <summary>내 ID (관리자 등록용)</summary>
+        <p>이 브라우저에 붙은 익명 ID예요. 관리자로 등록하려면 Firebase 콘솔의 <code>admins</code> 컬렉션에 이 ID로 빈 문서를 만들어요. 사이트 데이터를 지우면 새 ID가 생겨요.</p>
+        <div class="profile__id-row"><code id="myUid"></code><button class="btn btn--small" id="copyUid" type="button">복사</button></div>
+      </details>
     </section>
   </dialog>
 </body>

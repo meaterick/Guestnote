@@ -5,10 +5,11 @@ import assert from 'node:assert/strict';
 import { dayKey, isDayKey, addDays, monthKeys, describeDay, msUntilNextDay, dayHue } from '../public/assets/js/dates.js';
 import { accountAuthor } from '../public/assets/js/notes.js';
 
-test('계정 이름은 공백을 빼고 20자로 줄이고, 없으면 방문자로 표시해요', () => {
+test('작성자 이름은 공백을 빼고 20자로 줄이고, 없으면 익명으로 표시해요', () => {
   assert.equal(accountAuthor('  앨리스  '), '앨리스');
-  assert.equal(accountAuthor(), '방문자');
-  assert.equal(accountAuthor('   '), '방문자');
+  assert.equal(accountAuthor(), '익명');
+  assert.equal(accountAuthor(null), '익명');
+  assert.equal(accountAuthor('   '), '익명');
   assert.equal(accountAuthor('가'.repeat(21)), '가'.repeat(20));
   assert.equal(accountAuthor('😀'.repeat(21)), '😀'.repeat(10));
 });

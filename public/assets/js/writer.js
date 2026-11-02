@@ -230,7 +230,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
 
   // ---------- 시작, 올리기, 그만두기 ----------
   // at: 글상자를 열 보드 좌표 (없으면 화면 가운데 근처 빈자리)
-  // note: 고칠 내 글 / file: 처음부터 넣을 사진 / defaultAuthor: Google 계정 이름
+  // note: 고칠 내 글 / file: 처음부터 넣을 사진 / defaultAuthor: 새 글의 작성자 이름 (닉네임 또는 '익명')
   // deferFocus: 손가락으로 두 번 눌러 열 때. 커서는 손가락을 떼는 순간(focusPending)에 둬요.
   // photo: 고칠 글의 사진으로 보여 줄 주소 (움직이는 GIF를 불러왔으면 그 주소)
   function start({ at = null, note = null, file = null, defaultAuthor = '', deferFocus = false, photo = null } = {}) {
