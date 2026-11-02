@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { devices } from 'playwright';
 import { launch,prepare } from './helpers.mjs';
 const all=JSON.parse(fs.readFileSync(new URL('../public/assets/data/world-destinations.json',import.meta.url)));
-const destinations=['Tokyo','London','Sydney'].map(city=>all.destinations.find(p=>p.cityEn===city)).filter(Boolean);
+const destinations=[['Paris','FRA'],['Seoul','KOR'],['Sydney','AUS']].map(([city,country])=>all.destinations.find(p=>p.cityEn===city&&p.countryCode===country)).filter(Boolean);
 let app;const config={firebase:{apiKey:'demo-key',authDomain:'demo-guestnote.firebaseapp.com',projectId:'demo-guestnote',appId:'demo-app'},emulator:{host:'127.0.0.1',firestorePort:8080,authPort:9099}};
 before(async()=>{app=await launch();});after(async()=>{await app?.close();});
 async function pageFor(options={},mode='safe'){
@@ -32,7 +32,7 @@ test('모바일·동작 줄이기에서도 구체적 지명을 표시하고 화�
 });
 for(const mode of ['blocked','error'])test(mode==='blocked'?'고위험 지역만 나오면 후보를 확정하지 않아요':'경보 서버에 연결할 수 없으면 임의의 여행지를 보여 주지 않아요',async()=>{
   const {page}=await pageFor({reducedMotion:'reduce'},mode);
-  try{await open(page);await page.click('#tripDraw');await page.waitForSelector('#travel[data-state=error]');assert.equal(await page.isHidden('#tripLinks'),true);assert.equal(await page.isDisabled('#tripDraw'),false);assert.doesNotMatch(await page.textContent('#tripName'),/도쿄|런던|시드니/);}finally{await page.context().close();}
+  try{await open(page);await page.click('#tripDraw');await page.waitForSelector('#travel[data-state=error]');assert.equal(await page.isHidden('#tripLinks'),true);assert.equal(await page.isDisabled('#tripDraw'),false);const shown=await page.textContent('#tripName');assert.equal(destinations.some(p=>p.city===shown),false);}finally{await page.context().close();}
 });
 test('세계 지도 로딩 실패 후 다시 열면 복구돼요',async()=>{
   const {page}=await pageFor({reducedMotion:'reduce'});let fail=true;await page.route('**/world-map.json',r=>fail?r.fulfill({status:503,body:'error'}):r.continue());

@@ -1,5 +1,5 @@
 import { $,setupDialog,toast } from './ui.js';
-import { worldPoint,chooseCandidate } from './world-geo.js';
+import { worldPoint,chooseCandidate,isFamousCandidate } from './world-geo.js';
 import { selectVerifiedDestination } from './safe-travel.js';
 const NS='http://www.w3.org/2000/svg';
 function svg(tag,attrs={}){const el=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))el.setAttribute(k,v);return el;}
@@ -47,7 +47,9 @@ export function setupTravel(){
         const path=svg('path',{d:polygons.map(pathOf).join(''),class:'trip-region','fill-rule':'evenodd'});const title=svg('title');title.textContent=f.properties.name;path.append(title);land.append(path);paths.set(f.properties.code,path);}
       const layer=$('#tripLabels');layer.replaceChildren();
       for(const [label,lon,lat] of [['북아메리카',-105,48],['남아메리카',-60,-12],['유럽',15,51],['아프리카',20,5],['아시아',95,43],['오세아니아',140,-26]]){const [x,y]=worldPoint([lon,lat]),text=svg('text',{x,y,'text-anchor':'middle'});text.textContent=label;layer.append(text);}
-      destinations=catalog.destinations;if(!destinations.length)throw new Error('여행 후보가 없어요.');ready=true;
+      destinations=catalog.destinations.filter(isFamousCandidate);if(!destinations.length)throw new Error('조건에 맞는 유명 도시 후보가 없어요.');
+      $('#tripScope').textContent=`한국 여행자에게 익숙한 유명 도시 ${destinations.length}곳 · 아프리카·섬 제외`;
+      ready=true;
     })().catch(err=>{loading=null;ready=false;throw err;});
     await loading;
   }

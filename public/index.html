@@ -192,7 +192,7 @@
   <dialog class="modal modal--travel" id="travel" aria-labelledby="tripTitle" data-state="loading">
     <section class="trip-panel">
       <header class="trip-header">
-        <div><p class="trip-eyebrow">A LITTLE DETOUR</p><h2 id="tripTitle">세계 어디로 떠나볼까?</h2><p class="trip-subtitle">경보를 확인한 나라와 도시로 떠나는 랜덤 여행.</p></div>
+        <div><p class="trip-eyebrow">A LITTLE DETOUR</p><h2 id="tripTitle">세계 어디로 떠나볼까?</h2><p class="trip-subtitle" id="tripScope">한국 여행자에게 익숙한 유명 도시 중 한 곳으로.</p></div>
         <button class="icon-btn trip-close" type="button" data-close aria-label="여행 지도 닫기"><svg><use href="#i-close"/></svg></button>
       </header>
       <div class="trip-layout">
@@ -222,7 +222,7 @@
           <span class="trip-result-label">YOUR NEXT DESTINATION</span>
           <div class="trip-announcement" aria-live="polite" aria-atomic="true"><p class="trip-status" id="tripStatus">세계 지도를 펼치는 중…</p><p class="trip-province" id="tripProvince" hidden></p><h3 id="tripName">이번엔 어느 나라일까?</h3><p class="trip-city-en" id="tripCityEn" hidden></p><p class="trip-coords" id="tripCoords">나라를 넘어, 새로운 도시로</p><p class="trip-place-status" id="tripPlaceStatus" hidden></p></div>
           <div class="trip-links" id="tripLinks" hidden><a id="tripExternal" target="_blank" rel="noopener noreferrer">지도에서 보기 ↗</a><button id="tripCopy" type="button">좌표 복사</button><a id="tripAdvisory" href="https://www.0404.go.kr/" target="_blank" rel="noopener noreferrer">외교부 경보 확인 ↗</a></div>
-          <div class="trip-action"><button id="tripDraw" class="trip-draw" type="button" disabled>세계 여행지 뽑기 ↗</button><p>경보 미발령·1단계 지역만 확정해요.<br>2~4단계·특별여행주의보는 제외해요.</p></div>
+          <div class="trip-action"><button id="tripDraw" class="trip-draw" type="button" disabled>세계 여행지 뽑기 ↗</button><p>선정한 유명 도시만 뽑아요.<br>아프리카·섬 제외 · 여행경보 0~1단계</p></div>
           <p class="trip-note">한국 외교부 경보를 확인한 시각 기준의 여행 후보예요. 비자·입국 조건과 현지 접근성은 출발 전에 별도로 확인해 주세요.</p>
         </div>
       </div>
