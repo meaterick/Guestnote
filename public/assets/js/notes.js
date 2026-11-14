@@ -72,7 +72,7 @@ export function drawingSvg(strokes) {
   return svg;
 }
 
-// 작성자 이름: 닉네임을 정했으면 닉네임, 아니면 '익명'이에요. (보안 규칙의 authorName()과 같아요)
+// 기존 Firestore 보안 규칙과의 호환용 값이에요. 화면에는 이름을 표시하지 않아요.
 export const accountAuthor = (name = '') => ((name || '').trim() || '익명').slice(0, LIMITS.author);
 
 export function photoRatio(note) {
@@ -91,8 +91,6 @@ function content(note, photo) {
   const strokes = parseDraw(note.draw);
   if (strokes.length) parts.push(h('figure', { class: 'note__drawing' }, drawingSvg(strokes)));
   if (note.text) parts.push(h('p', { class: 'note__text', text: note.text }));
-  parts.push(h('footer', { class: 'note__foot' },
-    h('span', { class: 'note__sign', text: note.author })));
   return parts;
 }
 
@@ -102,7 +100,7 @@ const painted = new WeakMap();
 export function paintNote(el, note, ctx) {
   const photo = ctx.photo?.(note) || note.img;
   // 내용이 그대로면 다시 그리지 않아요. (사진이 깜빡이지 않게)
-  const sig = [note.author, note.text, photo, note.imgW, note.imgH, note.draw];
+  const sig = [note.text, photo, note.imgW, note.imgH, note.draw];
   const prev = painted.get(el);
   if (!prev || prev.some((v, i) => v !== sig[i])) {
     painted.set(el, sig);
@@ -122,7 +120,7 @@ export function paintNote(el, note, ctx) {
   el.style.setProperty('--rot', `${Number(note.rot) || 0}deg`);
   const what = hasPhoto ? (note.text ? '사진과 글' : '사진') : note.draw ? (note.text ? '그림과 글' : '그림') : '글';
   const excerpt = note.text ? `: ${note.text.slice(0, 80)}` : '';
-  el.setAttribute('aria-label', `${note.author}님의 ${what}${excerpt}`);
+  el.setAttribute('aria-label', `${what}${excerpt}`);
 }
 
 // 글꼴과 크기는 CSS 변수로 넘겨요. (--s: 크기, --fs: 글꼴 보정, --ff: 글꼴)

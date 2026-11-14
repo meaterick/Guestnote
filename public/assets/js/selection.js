@@ -1,10 +1,9 @@
-// 고른 글: 글을 한 번 누르면 아래 막대에 쓴 사람과 시간이 나오고, 권한에 따라 크게 보기·고치기·지우기를 할 수 있어요.
+// 고른 글: 아래 막대에 시간을 표시하고, 권한에 따라 크게 보기·고치기·지우기를 할 수 있어요.
 import { $, setupDialog, errorMessage, toast } from './ui.js';
 import { formatTime } from './dates.js';
 import { isSafeImageUrl } from './image.js';
 
 export function createSelection({ bar, viewer, store, timeZone, permissions, board, onEdit, onChange }) {
-  const author = $('#pickAuthor', bar);
   const time = $('#pickTime', bar);
   const mine = $('#pickMine', bar);
   const actions = $('#pickActions', bar);
@@ -34,7 +33,6 @@ export function createSelection({ bar, viewer, store, timeZone, permissions, boa
 
   function render() {
     const n = current;
-    author.textContent = n.author;
     time.textContent = formatTime(n.createdAt, timeZone);
     time.dateTime = new Date(n.createdAt).toISOString();
     mine.hidden = !permissions.isMine(n);
@@ -67,7 +65,7 @@ export function createSelection({ bar, viewer, store, timeZone, permissions, boa
     if (!isSafeImageUrl(note.img)) return;
     const my = ++ticket;
     photo.src = note.img;
-    photo.alt = note.text ? `${note.author}님이 올린 사진: ${note.text.slice(0, 60)}` : `${note.author}님이 올린 사진`;
+    photo.alt = note.text ? `사진: ${note.text.slice(0, 60)}` : '사진';
     lightbox.open();
     if (!note.imgFull) return;
     try {

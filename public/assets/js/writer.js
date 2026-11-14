@@ -4,7 +4,7 @@
 // 사진은 버튼, 끌어 놓기, 붙여 넣기로 넣을 수 있고, 올리기 전에 브라우저에서 줄여요.
 import { $, h, toast, errorMessage } from './ui.js';
 import {
-  STYLES, TINTS, LIMITS, FONTS, SIZES, DRAW, photoRatio, accountAuthor, applyLook, fontOf, sizeOf,
+  STYLES, TINTS, LIMITS, FONTS, SIZES, DRAW, photoRatio, applyLook, fontOf, sizeOf,
   parseDraw, encodeDraw, pathOf, drawingSvg,
 } from './notes.js';
 import { compressImage, formatBytes, isSafeImageUrl, ImageError } from './image.js';
@@ -60,7 +60,6 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     unphoto.innerHTML = '<svg aria-hidden="true"><use href="#i-close"/></svg>';
     const fig = h('figure', { class: 'note__photo draft__photo', hidden: true },
       img, h('span', { class: 'draft__busy', text: '사진을 줄이는 중…' }), unphoto);
-    const name = h('span', { class: 'note__sign draft__name', 'aria-label': '작성자' });
     // 손그림 판: 누르고 끌면 선이 그려져요. 오른쪽 위에 되돌리기와 그림 빼기가 있어요.
     const ink = drawingSvg([]);
     const undo = h('button', { type: 'button', class: 'draft__undo', 'aria-label': '마지막 선 지우기', title: '마지막 선 지우기' });
@@ -71,7 +70,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     const pad = h('figure', { class: 'note__drawing draft__pad', hidden: true, 'aria-label': '손그림 판' },
       ink, hint, h('div', { class: 'draft__pad-tools' }, undo, undraw));
     const el = h('div', { class: 'note is-draft', role: 'group', 'aria-label': '쓰는 중인 글' },
-      fig, pad, grow, h('footer', { class: 'note__foot' }, name));
+      fig, pad, grow);
     undo.addEventListener('click', () => {
       if (!d || d.busy) return;
       d.strokes.pop();
@@ -100,7 +99,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
       }
     });
     img.addEventListener('load', () => d && reveal());
-    return { el, text, grow, fig, img, name, pad, ink, hint, undo };
+    return { el, text, grow, fig, img, pad, ink, hint, undo };
   }
 
   // ---------- 자리와 보이기 ----------
@@ -378,10 +377,10 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
 
   // ---------- 시작, 올리기, 그만두기 ----------
   // at: 글상자를 열 보드 좌표 (없으면 화면 가운데 근처 빈자리)
-  // note: 고칠 내 글 / file: 처음부터 넣을 사진 / defaultAuthor: 새 글의 작성자 이름 (닉네임 또는 '익명')
+  // note: 고칠 내 글 / file: 처음부터 넣을 사진
   // deferFocus: 손가락으로 두 번 눌러 열 때. 커서는 손가락을 떼는 순간(focusPending)에 둬요.
   // photo: 고칠 글의 사진으로 보여 줄 주소 (움직이는 GIF를 불러왔으면 그 주소)
-  function start({ at = null, note = null, file = null, defaultAuthor = '', deferFocus = false, photo = null } = {}) {
+  function start({ at = null, note = null, file = null, deferFocus = false, photo = null } = {}) {
     if (d) {
       // 이미 쓰는 중이면 그 글상자를 누른 곳으로 옮기고 이어서 써요.
       if (at && !d.busy) {
@@ -407,8 +406,6 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     setLook(note?.font ?? lastLook.font, note?.size ?? lastLook.size);
     d.text.value = note?.text ?? '';
     d.grow.dataset.value = d.text.value;
-    d.author = note ? note.author : accountAuthor(defaultAuthor);
-    d.name.textContent = d.author;
     if (note && isSafeImageUrl(note.img)) showPhoto(isSafeImageUrl(photo) ? photo : note.img, photoRatio(note));
     const strokes = parseDraw(note?.draw);
     if (strokes.length) {
@@ -462,7 +459,6 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
       return;
     }
     const text = d.text.value.replace(/\s+$/, '').slice(0, LIMITS.text);
-    const author = d.author;
     const draw = drawingText();
     if (!text.trim() && !hasPhoto() && !draw) {
       toast('내용을 적거나 사진을 넣거나 그림을 그려 주세요.');
@@ -473,7 +469,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     const pos = board.clampPos(d.x, d.y, w, ht);
     // draw: null 이면 그림을 빼요. (고칠 때 원래 그림을 지워요)
     const data = {
-      type: d.style, author, text: text.trim() ? text : '', color: d.tint, rot: d.rot, font: d.font, size: d.size,
+      type: d.style, text: text.trim() ? text : '', color: d.tint, rot: d.rot, font: d.font, size: d.size,
       draw: draw || null,
     };
     lastLook = { font: d.font, size: d.size };
