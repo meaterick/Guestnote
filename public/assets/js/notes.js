@@ -35,17 +35,18 @@ export const fontOf = (id) => FONTS.find((f) => f.id === id) ?? FONTS[0];
 export const SIZES = [0.6, 0.8, 1, 1.3, 1.7, 2.2];
 export const sizeOf = (v) => (SIZES.includes(v) ? v : 1);
 
-// 손그림: 선의 좌표를 'x y x y …' 로 적고 선 사이는 ';' 로 나눠요. 좌표는 DRAW 크기 안의 정수예요.
-// 사진처럼 무겁지 않고, 크게 키워도 선명해요.
-export const DRAW = { w: 600, h: 450, stroke: 6 };
+// 손그림: 보드에 바로 그린 선이에요. 좌표를 'x y x y …' 로 적고 선 사이는 ';' 로 나눠요.
+// 좌표는 그림 상자(drawW × drawH, 보드 픽셀) 안의 정수예요. 사진처럼 무겁지 않고, 크게 봐도 선명해요.
+// 선 굵기는 stroke × 크기(size)예요. (예전 그림판 그림은 600 × 450 상자예요)
+export const DRAW = { w: 600, h: 450, stroke: 6, maxW: 4000, maxH: 2600 };
 
-export function parseDraw(text) {
+export function parseDraw(text, w = DRAW.w, h = DRAW.h) {
   if (typeof text !== 'string' || !/^[0-9 ;]+$/.test(text)) return [];
   return text.split(';').map((part) => {
     const n = part.trim().split(/\s+/).map(Number);
     const pts = [];
     for (let i = 0; i + 1 < n.length; i += 2) {
-      if (Number.isFinite(n[i]) && Number.isFinite(n[i + 1])) pts.push([Math.min(n[i], DRAW.w), Math.min(n[i + 1], DRAW.h)]);
+      if (Number.isFinite(n[i]) && Number.isFinite(n[i + 1])) pts.push([Math.min(n[i], w), Math.min(n[i + 1], h)]);
     }
     return pts;
   }).filter((pts) => pts.length);
@@ -59,9 +60,9 @@ export const pathOf = (pts) => (pts.length === 1
   : `M${pts.map(([x, y]) => `${x} ${y}`).join('L')}`);
 
 const SVG = 'http://www.w3.org/2000/svg';
-export function drawingSvg(strokes) {
+export function drawingSvg(strokes, w = DRAW.w, h = DRAW.h) {
   const svg = document.createElementNS(SVG, 'svg');
-  svg.setAttribute('viewBox', `0 0 ${DRAW.w} ${DRAW.h}`);
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
   svg.setAttribute('class', 'note__ink');
   svg.setAttribute('aria-hidden', 'true');
   for (const pts of strokes) {
@@ -88,11 +89,26 @@ function content(note, photo) {
     fig.style.aspectRatio = String(photoRatio(note));
     parts.push(fig);
   }
-  const strokes = parseDraw(note.draw);
-  if (strokes.length) parts.push(h('figure', { class: 'note__drawing' }, drawingSvg(strokes)));
+  const dw = drawSize(note.drawW, DRAW.w, DRAW.maxW);
+  const dh = drawSize(note.drawH, DRAW.h, DRAW.maxH);
+  const strokes = parseDraw(note.draw, dw, dh);
+  if (strokes.length) {
+    const fig = h('figure', { class: 'note__drawing' }, drawingSvg(strokes, dw, dh));
+    fig.style.aspectRatio = `${dw} / ${dh}`;
+    // 보드에 바로 그린 그림(글·사진 없이)은 그린 크기 그대로 그 자리에 보여요.
+    if (isInk(note)) {
+      fig.style.width = `${dw}px`;
+      fig.style.height = `${dh}px`;
+    }
+    parts.push(fig);
+  }
   if (note.text) parts.push(h('p', { class: 'note__text', text: note.text }));
   return parts;
 }
+
+const drawSize = (v, fallback, max) => (Number.isInteger(v) && v > 0 ? Math.min(v, max) : fallback);
+// 글도 사진도 없이 그림만 있는 글: 보드에 바로 그린 그림이에요.
+export const isInk = (note) => !!note.draw && !note.text && !isSafeImageUrl(note.img);
 
 const painted = new WeakMap();
 
@@ -100,7 +116,7 @@ const painted = new WeakMap();
 export function paintNote(el, note, ctx) {
   const photo = ctx.photo?.(note) || note.img;
   // 내용이 그대로면 다시 그리지 않아요. (사진이 깜빡이지 않게)
-  const sig = [note.text, photo, note.imgW, note.imgH, note.draw];
+  const sig = [note.text, photo, note.imgW, note.imgH, note.draw, note.drawW, note.drawH];
   const prev = painted.get(el);
   if (!prev || prev.some((v, i) => v !== sig[i])) {
     painted.set(el, sig);
@@ -113,6 +129,7 @@ export function paintNote(el, note, ctx) {
   el.classList.toggle('note--memo', style === 'memo');
   el.classList.toggle('has-photo', hasPhoto);
   el.classList.toggle('has-drawing', !!note.draw);
+  el.classList.toggle('is-ink', isInk(note));
   applyLook(el, note);
   el.dataset.tint = TINTS.some((t) => t.id === note.color) ? note.color : 'clear';
   el.classList.toggle('is-mine', note.ownerId === ctx.uid);

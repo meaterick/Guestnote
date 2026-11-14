@@ -151,19 +151,15 @@ test('메모장 모양과 색을 골라서 쓸 수 있어요', async () => {
   assert.deepEqual(await memo.evaluate((el) => [el.classList.contains('note--memo'), el.dataset.tint]), [true, 'rose']);
 });
 
-// 손그림 판 위에서 마우스로 선을 그어요. (판 크기에 대한 비율 좌표)
+// 그림 모드에서 보드 위에 마우스로 선을 그어요. (화면 좌표)
 async function scribble(page, from, to) {
-  const box = await page.locator('.is-draft .draft__pad').boundingBox();
-  const at = ([fx, fy]) => [box.x + box.width * fx, box.y + box.height * fy];
-  const [x1, y1] = at(from);
-  const [x2, y2] = at(to);
-  await page.mouse.move(x1, y1);
+  await page.mouse.move(from[0], from[1]);
   await page.mouse.down();
-  for (let i = 1; i <= 8; i++) await page.mouse.move(x1 + ((x2 - x1) * i) / 8, y1 + ((y2 - y1) * i) / 8);
+  for (let i = 1; i <= 8; i++) await page.mouse.move(from[0] + ((to[0] - from[0]) * i) / 8, from[1] + ((to[1] - from[1]) * i) / 8);
   await page.mouse.up();
 }
 
-test('글꼴과 크기를 고르고 손그림을 그려서 올리면, 다른 사람에게도 그대로 보여요', async () => {
+test('글꼴과 크기를 고르면 다른 사람에게도 그대로 보여요', async () => {
   await alice.click('#writeBtn');
   await alice.waitForSelector('.is-draft textarea');
   assert.equal(await alice.inputValue('#writeFont'), 'pen', '기본 글꼴은 손글씨예요');
@@ -174,28 +170,16 @@ test('글꼴과 크기를 고르고 손그림을 그려서 올리면, 다른 사
   await alice.click('#writeBigger');
   await alice.click('#writeBigger');
   assert.ok(await width() > small * 1.3, '크게 하면 글상자도 커져요');
-  // 손그림: 모양을 '그림'으로 바꾸면 바로 그림판이 열려요. 두 줄 긋고 하나 되돌려요.
-  await alice.check('#writeBar input[name=style][value=draw]', { force: true });
-  await alice.waitForSelector('.is-draft .draft__pad:not([hidden])');
-  assert.equal(await alice.locator('#writeDraw').count(), 0, '그림 추가 버튼은 따로 없어요');
-  await scribble(alice, [0.1, 0.2], [0.8, 0.7]);
-  await scribble(alice, [0.2, 0.8], [0.9, 0.1]);
-  assert.equal(await alice.locator('.is-draft .draft__pad path').count(), 2);
-  await alice.click('.is-draft .draft__undo');
-  assert.equal(await alice.locator('.is-draft .draft__pad path').count(), 1);
-  // 그리는 동안 보드는 움직이지 않아요.
   await alice.click('#writeSubmit');
   await alice.waitForSelector('.is-draft', { state: 'detached', timeout: 15_000 });
-  const art = bob.locator('.note', { hasText: '크게 쓴 바탕체' });
-  await art.waitFor({ timeout: 10_000 });
-  assert.deepEqual(await art.evaluate((el) => [el.dataset.font, el.style.getPropertyValue('--s'), el.querySelectorAll('.note__ink path').length]), ['batang', '1.7', 1]);
-  assert.match(await art.evaluate((el) => getComputedStyle(el.querySelector('.note__text')).fontFamily), /Gowun Batang/);
-
-  // 고칠 때 그림을 빼고, 글꼴과 크기를 원래대로 돌려요. (다음 글이 이 모양을 이어받지 않게)
+  const look = bob.locator('.note', { hasText: '크게 쓴 바탕체' });
+  await look.waitFor({ timeout: 10_000 });
+  assert.deepEqual(await look.evaluate((el) => [el.dataset.font, el.style.getPropertyValue('--s')]), ['batang', '1.7']);
+  assert.match(await look.evaluate((el) => getComputedStyle(el.querySelector('.note__text')).fontFamily), /Gowun Batang/);
+  // 고쳐서 글꼴과 크기를 원래대로 돌려요. (다음 글이 이 모양을 이어받지 않게)
   await alice.locator('.note', { hasText: '크게 쓴 바탕체' }).dblclick();
-  await alice.waitForSelector('.is-draft .draft__pad:not([hidden]) path');
+  await alice.waitForSelector('.is-draft textarea');
   assert.equal(await alice.inputValue('#writeFont'), 'batang');
-  await alice.click('.is-draft .draft__undraw');
   await alice.selectOption('#writeFont', 'pen');
   await alice.click('#writeSmaller');
   await alice.click('#writeSmaller');
@@ -203,30 +187,51 @@ test('글꼴과 크기를 고르고 손그림을 그려서 올리면, 다른 사
   await alice.waitForSelector('.is-draft', { state: 'detached', timeout: 15_000 });
   await bob.waitForFunction(() => {
     const el = [...document.querySelectorAll('.note')].find((n) => n.textContent.includes('크게 쓴 바탕체'));
-    return el && !el.querySelector('.note__ink') && el.dataset.font === 'pen' && el.style.getPropertyValue('--s') === '1';
+    return el && el.dataset.font === 'pen' && el.style.getPropertyValue('--s') === '1';
   }, null, { timeout: 10_000 });
+});
 
-  // 그림만 그려서 올릴 수도 있어요.
-  await bob.click('#writeBtn');
-  await bob.waitForSelector('.is-draft textarea');
-  await bob.check('#writeBar input[name=style][value=draw]', { force: true });
-  assert.equal(await bob.isHidden('.is-draft .draft__grow'), true, '그림 모드에서는 글칸 대신 그림판만 보여요');
-  await scribble(bob, [0.3, 0.3], [0.6, 0.6]);
-  await bob.click('#writeSubmit');
-  await bob.waitForSelector('.is-draft', { state: 'detached', timeout: 15_000 });
-  await alice.waitForFunction(() => [...document.querySelectorAll('.note')].some((n) => n.querySelector('.note__ink path') && n.getAttribute('aria-label') === '그림'), null, { timeout: 10_000 });
-  // 다음 글상자는 고른 모드(그림) 그대로 바로 그림판으로 열려요. 글자로 바꾸면 다시 글자로 열려요.
-  await bob.mouse.dblclick(...(await (async () => { const s = await emptySpot(bob); return [s.x, s.y]; })()));
-  await bob.waitForSelector('.is-draft .draft__pad:not([hidden])');
-  assert.equal(await bob.inputValue('#writeBar input[name=style]:checked'), 'draw');
-  await scribble(bob, [0.2, 0.2], [0.4, 0.5]);
-  assert.equal(await bob.locator('.is-draft .draft__pad path').count(), 1);
-  await bob.check('#writeBar input[name=style][value=text]', { force: true });
-  await bob.click('#writeCancel');
-  await bob.click('#writeBtn');
-  await bob.waitForSelector('.is-draft .draft__grow:not([hidden]) textarea');
-  assert.equal(await bob.isHidden('.is-draft .draft__pad'), true);
-  await bob.click('#writeCancel');
+test('그림 모드에서는 칸 없이 보드에 바로 그리고, 그린 자리 그대로 올라가요', async () => {
+  const inks = (page) => page.evaluate(() => [...document.querySelectorAll('.note.is-ink')].map((n) => n.dataset.id));
+  const before = await inks(bob);
+  await alice.click('#writeBtn');
+  await alice.waitForSelector('.is-draft textarea');
+  await alice.check('#writeBar input[name=style][value=draw]', { force: true });
+  await alice.waitForSelector('#viewport.is-inking');
+  assert.equal(await alice.isHidden('.is-draft'), true, '그림 모드에서는 글상자(그림 칸)가 없어요');
+  assert.equal(await alice.locator('text=여기에 그려요').count(), 0);
+  // 빈 곳을 골라 두 줄 긋고, 하나 되돌려요. 끌어도 보드는 움직이지 않아요.
+  const spot = await emptySpot(alice);
+  const view = await alice.evaluate(() => getComputedStyle(document.querySelector('#world')).transform);
+  await scribble(alice, [spot.x, spot.y], [spot.x + 120, spot.y + 50]);
+  await scribble(alice, [spot.x, spot.y + 50], [spot.x + 120, spot.y]);
+  assert.equal(await alice.evaluate(() => getComputedStyle(document.querySelector('#world')).transform), view, '그리는 동안 보드는 그대로예요');
+  assert.equal(await alice.locator('.ink-layer path').count(), 2);
+  await alice.click('#writeUndo');
+  assert.equal(await alice.locator('.ink-layer path').count(), 1);
+  await alice.click('#writeSubmit');
+  await alice.waitForSelector('.is-draft', { state: 'detached', timeout: 15_000 });
+  await alice.waitForFunction(() => !document.querySelector('#viewport').classList.contains('is-inking'));
+  // 다른 사람 화면에 그림 글이 생기고, 그린 자리(화면 좌표)에 그대로 있어요.
+  await bob.waitForFunction((ids) => [...document.querySelectorAll('.note.is-ink')].some((n) => !ids.includes(n.dataset.id)), before, { timeout: 10_000 });
+  const box = await alice.evaluate(() => {
+    const el = [...document.querySelectorAll('.note.is-ink')].at(-1);
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, h: r.height, label: el.getAttribute('aria-label') };
+  });
+  assert.equal(box.label, '그림');
+  assert.ok(Math.abs(box.x - spot.x) < 20 && Math.abs(box.y - spot.y) < 20, `그린 자리 그대로예요: ${JSON.stringify(box)} / ${JSON.stringify(spot)}`);
+  assert.ok(box.w > 100 && box.w < 160 && box.h > 35 && box.h < 80, `그린 크기만큼이에요: ${JSON.stringify(box)}`);
+
+  // 다음 글상자도 그림 모드로 바로 열려요. 글자로 바꾸면 다시 글자예요.
+  await alice.click('#writeBtn');
+  await alice.waitForSelector('#viewport.is-inking');
+  assert.equal(await alice.inputValue('#writeBar input[name=style]:checked'), 'draw');
+  await alice.check('#writeBar input[name=style][value=text]', { force: true });
+  await alice.waitForSelector('.is-draft textarea', { state: 'visible' });
+  assert.equal(await alice.evaluate(() => document.querySelector('#viewport').classList.contains('is-inking')), false);
+  await alice.click('#writeCancel');
+  await alice.waitForSelector('.is-draft', { state: 'detached' });
 });
 
 test('Enter로 바로 올리고, Shift+Enter로 줄을 바꿔요', async () => {
@@ -388,7 +393,7 @@ test('사진 파일이 아니면 알려 주고, 빈 글은 올리지 않아요',
   await alice.setInputFiles('#photoInput', { name: 'note.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') });
   await alice.waitForSelector('.toast >> text=사진 파일만');
   await alice.click('#writeSubmit');
-  await alice.waitForSelector('.toast >> text=내용을 적거나 사진을 넣거나 그림을 그려 주세요');
+  await alice.waitForSelector('.toast >> text=내용을 적거나 사진을 넣어 주세요');
   assert.equal(await alice.locator('.is-draft').count(), 1);
   await alice.click('#writeCancel');
   await alice.waitForSelector('.is-draft', { state: 'detached' });

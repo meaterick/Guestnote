@@ -543,15 +543,16 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
 .note__ink { display: block; width: 100%; height: 100%; overflow: visible; }
 .note__ink path { fill: none; stroke: currentColor; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
 .note--text .note__ink { filter: drop-shadow(0 1px 0 rgb(255 255 255 / 0.25)); }
-/* 그리는 중인 판: 점선 테두리로 그릴 곳을 보여 주고, 손가락으로 그려도 보드가 움직이지 않게 해요. */
-.note.is-draft .draft__grow[hidden] { display: none; }
-.draft__pad { border-radius: 12px; outline: 1.5px dashed color-mix(in oklch, var(--ink) 35%, transparent); outline-offset: -1px; background: color-mix(in oklch, var(--soft-fill) 60%, transparent); touch-action: none; cursor: crosshair; -webkit-user-select: none; user-select: none; }
-.draft__pad .note__ink { pointer-events: none; }
-.draft__pad-tools { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; }
-.draft__pad-tools button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: var(--glass-fill-strong); color: var(--ink); box-shadow: var(--shadow-1); font-size: 15px; }
-.draft__pad-tools button:disabled { opacity: 0.4; }
-.draft__pad-tools svg { width: 16px; height: 16px; }
-.draft__pad-hint { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font-size: 15px; color: var(--ink-3); pointer-events: none; }
+/* 보드에 바로 그린 그림: 그린 크기 그대로, 테두리나 여백 없이 보여요. */
+.note.is-ink { width: max-content; max-width: none; padding: 0; border-radius: 6px; }
+.note.is-ink .note__drawing { margin: 0; }
+.note.is-ink .note__ink path { stroke-width: calc(6px * var(--s, 1)); }
+/* 그림 모드에서 그리는 중인 선 (보드 전체를 덮는 투명한 층) */
+.ink-layer { position: absolute; left: 0; top: 0; width: 4000px; height: 2600px; max-width: none; padding: 0; pointer-events: none; overflow: visible; }
+.ink-layer path { fill: none; stroke: currentColor; stroke-width: var(--ink-w, 6px); stroke-linecap: round; stroke-linejoin: round; }
+.ink-layer.is-idle { opacity: 0.35; }
+.viewport.is-inking, .viewport.is-inking .note { cursor: crosshair; }
+.viewport.is-inking { touch-action: none; }
 
 /* ---------- 보드에 바로 쓰는 글상자 ---------- */
 .drafts { position: absolute; inset: 0; pointer-events: none; }
@@ -716,6 +717,9 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
   .tools { flex-wrap: wrap; justify-content: center; row-gap: 6px; border-radius: 28px; }
 }
 .tools__look { display: flex; align-items: center; gap: 2px; flex: none; }
+.tools__ink { display: flex; align-items: center; gap: 2px; flex: none; }
+.tools__ink:not(:has(:not([hidden]))) { display: none; }
+.tools__font[hidden] { display: none; }
 .tools__font {
   height: 34px;
   padding: 0 26px 0 12px;
@@ -1047,6 +1051,7 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
   .tools__style .seg__item span { padding-inline: 0; font-size: 14px; white-space: nowrap; }
   .tools__look { order: 6; flex: 1 1 auto; justify-content: space-around; }
   .tools__photo { order: 7; }
+  .tools__ink { order: 6; }
   .tools__look .tools__font { flex: 1; max-width: 9em; }
 
   .modal, .modal--calendar, .modal--menu {

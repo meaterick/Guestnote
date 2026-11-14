@@ -127,6 +127,10 @@
         <label class="seg__item"><input type="radio" name="style" value="draw"><span>그림</span></label>
       </div>
       <div class="swatches swatches--small tools__tints" id="writeTints" role="radiogroup" aria-label="색"></div>
+      <div class="tools__ink">
+        <button class="icon-btn" id="writeUndo" type="button" aria-label="마지막 선 지우기" title="마지막 선 지우기" hidden><svg><use href="#i-undo"/></svg></button>
+        <button class="btn btn--small" id="writeClear" type="button" hidden>모두 지우기</button>
+      </div>
       <div class="tools__look">
         <select class="tools__font" id="writeFont" aria-label="글꼴"></select>
         <button class="icon-btn tools__size" id="writeSmaller" type="button" aria-label="작게" title="작게"><span class="size-glyph size-glyph--s" aria-hidden="true">가</span></button>

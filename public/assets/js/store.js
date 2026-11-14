@@ -9,7 +9,7 @@
 //   profiles/{uid} 기존 보안 규칙과의 호환용 프로필. 이름은 화면에 표시하지 않아요.
 //   presence/{id} 탭별 접속 기록. 마지막 시각과 익명 uid만 저장해요.
 
-import { accountAuthor, DRAW } from './notes.js';
+import { accountAuthor } from './notes.js';
 import { watchPresence } from './presence.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/12.19.0';
@@ -185,7 +185,6 @@ export async function createStore(config) {
       const clean = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== null && v !== undefined));
       const note = {
         ...clean,
-        ...(clean.draw ? { drawW: DRAW.w, drawH: DRAW.h } : {}),
         author: session.author,
         ownerId: session.user.uid,
         createdAt: F.serverTimestamp(),
@@ -211,8 +210,6 @@ export async function createStore(config) {
       for (const [k, v] of Object.entries(editable)) {
         if (v !== undefined) fields[k] = v === null ? F.deleteField() : v;
       }
-      if (editable.draw === null) Object.assign(fields, { drawW: F.deleteField(), drawH: F.deleteField() });
-      else if (editable.draw) Object.assign(fields, { drawW: DRAW.w, drawH: DRAW.h });
       if (image === null) {
         for (const k of ['img', 'imgType', 'imgW', 'imgH', 'imgFull', 'imgAnim']) fields[k] = F.deleteField();
       } else if (image) {

@@ -37,6 +37,8 @@ export function createBoard({ viewport, world, layer, handlers }) {
   let edgeRaf = 0;
   let kbTimer = 0;
   let settled = false;
+  // 그림 모드: 한 손가락(마우스 왼쪽 버튼)으로 끌면 보드를 옮기는 대신 선을 그려요. 두 손가락은 그대로 옮기기·확대예요.
+  let ink = null;
 
   // ---------- 화면 ↔ 보드 좌표 ----------
   function toWorld(cx, cy) {
@@ -367,10 +369,22 @@ export function createBoard({ viewport, world, layer, handlers }) {
     stopAnim();
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { viewport.setPointerCapture(e.pointerId); } catch { /* 이미 끝난 포인터 */ }
-    if (pointers.size === 2) return startPinch();
+    if (pointers.size === 2) {
+      // 두 번째 손가락이 닿으면 막 그리기 시작한 선은 지우고 옮기기·확대로 바꿔요.
+      if (gesture?.type === 'ink') {
+        ink?.cancel();
+        gesture = null;
+      }
+      return startPinch();
+    }
     if (pointers.size > 2) return;
-    const item = itemFromTarget(e.target);
     const start = { x: e.clientX, y: e.clientY };
+    if (ink && e.button === 0) {
+      gesture = { type: 'ink', pid: e.pointerId, start };
+      ink.start(toWorld(e.clientX, e.clientY));
+      return;
+    }
+    const item = itemFromTarget(e.target);
     if (item && e.button === 0 && ctx.canMove(item.note)) {
       const w = toWorld(e.clientX, e.clientY);
       gesture = {
@@ -423,6 +437,12 @@ export function createBoard({ viewport, world, layer, handlers }) {
     if (!g) return;
     if (g.type === 'pinch') return pointers.size >= 2 && updatePinch();
     if (g.type === 'idle' || g.pid !== e.pointerId) return;
+    if (g.type === 'ink') {
+      // 빠르게 그어도 선이 매끄럽게 이어지도록 사이에 생긴 점도 받아요.
+      const events = e.getCoalescedEvents?.() ?? [];
+      for (const c of events.length ? events : [e]) ink?.move(toWorld(c.clientX, c.clientY));
+      return;
+    }
     const dx = e.clientX - g.start.x;
     const dy = e.clientY - g.start.y;
     if (!g.moved) {
@@ -454,6 +474,10 @@ export function createBoard({ viewport, world, layer, handlers }) {
     }
     if (g.pid !== e.pointerId) return;
     gesture = null;
+    if (g.type === 'ink') {
+      ink?.end();
+      return;
+    }
     viewport.classList.remove('is-panning');
     if (g.type === 'note') {
       g.item.el.classList.remove('is-dragging');
@@ -467,6 +491,7 @@ export function createBoard({ viewport, world, layer, handlers }) {
   function onCancel(e) {
     pointers.delete(e.pointerId);
     const g = gesture;
+    if (g?.type === 'ink') ink?.cancel();
     if (g?.type === 'note') {
       g.item.el.classList.remove('is-dragging');
       place(g.item.el, g.item.note.x, g.item.note.y);
@@ -565,6 +590,13 @@ export function createBoard({ viewport, world, layer, handlers }) {
     zoomBy,
     panBy: (dx, dy) => animateTo({ x: view.x + dx, y: view.y + dy }, 200),
     toWorld,
+    world: WORLD,
+    // handler: { start(p), move(p), end(), cancel() } 보드 좌표로 알려 줘요. null이면 그림 모드를 끝내요.
+    setInk(handler) {
+      ink = handler;
+      viewport.classList.toggle('is-inking', !!handler);
+      if (!handler && gesture?.type === 'ink') gesture = null;
+    },
     findSpot,
     clampPos,
     reveal,

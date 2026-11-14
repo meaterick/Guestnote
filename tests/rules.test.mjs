@@ -118,6 +118,9 @@ test('글꼴·크기는 정해진 것만, 손그림은 좌표 글자로 30,000�
   await assertFails(setDoc(doc(db, 'notes/d1'), note({ ...art, draw: '<script>' })));
   await assertFails(setDoc(doc(db, 'notes/d2'), note({ ...art, draw: '1 '.repeat(15001) })));
   await assertFails(setDoc(doc(db, 'notes/d3'), note({ ...art, drawW: 6000 })));
+  await assertFails(setDoc(doc(db, 'notes/d3b'), note({ ...art, drawH: 0 })));
+  await assertFails(setDoc(doc(db, 'notes/d3c'), note({ ...art, drawW: 12.5 })));
+  await assertSucceeds(setDoc(doc(db, 'notes/wide'), note({ text: '', ...art, drawW: 1800, drawH: 90 })));
   await assertFails(setDoc(doc(db, 'notes/d4'), note({ draw: '1 2' })));
   await assertFails(setDoc(doc(db, 'notes/d5'), note({ drawW: 600, drawH: 450 })));
   await assertFails(setDoc(doc(db, 'notes/d6'), note({ text: '', draw: '', drawW: 600, drawH: 450 })));
