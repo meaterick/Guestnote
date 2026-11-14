@@ -162,6 +162,71 @@ test('메모장 모양과 색을 골라서 쓸 수 있어요', async () => {
   assert.deepEqual(await memo.evaluate((el) => [el.classList.contains('note--memo'), el.dataset.tint]), [true, 'rose']);
 });
 
+// 손그림 판 위에서 마우스로 선을 그어요. (판 크기에 대한 비율 좌표)
+async function scribble(page, from, to) {
+  const box = await page.locator('.is-draft .draft__pad').boundingBox();
+  const at = ([fx, fy]) => [box.x + box.width * fx, box.y + box.height * fy];
+  const [x1, y1] = at(from);
+  const [x2, y2] = at(to);
+  await page.mouse.move(x1, y1);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(x1 + ((x2 - x1) * i) / 8, y1 + ((y2 - y1) * i) / 8);
+  await page.mouse.up();
+}
+
+test('글꼴과 크기를 고르고 손그림을 그려서 올리면, 다른 사람에게도 그대로 보여요', async () => {
+  await alice.click('#writeBtn');
+  await alice.waitForSelector('.is-draft textarea');
+  assert.equal(await alice.inputValue('#writeFont'), 'pen', '기본 글꼴은 손글씨예요');
+  await alice.selectOption('#writeFont', 'batang');
+  const width = async () => (await alice.locator('.is-draft').boundingBox()).width;
+  await alice.fill('.is-draft textarea', '크게 쓴 바탕체');
+  const small = await width();
+  await alice.click('#writeBigger');
+  await alice.click('#writeBigger');
+  assert.ok(await width() > small * 1.3, '크게 하면 글상자도 커져요');
+  // 손그림: 두 줄 긋고 하나 되돌려요.
+  await alice.click('#writeDraw');
+  assert.equal(await alice.getAttribute('#writeDraw', 'aria-pressed'), 'true');
+  await alice.waitForSelector('.is-draft .draft__pad:not([hidden])');
+  await scribble(alice, [0.1, 0.2], [0.8, 0.7]);
+  await scribble(alice, [0.2, 0.8], [0.9, 0.1]);
+  assert.equal(await alice.locator('.is-draft .draft__pad path').count(), 2);
+  await alice.click('.is-draft .draft__undo');
+  assert.equal(await alice.locator('.is-draft .draft__pad path').count(), 1);
+  // 그리는 동안 보드는 움직이지 않아요.
+  await alice.click('#writeSubmit');
+  await alice.waitForSelector('.is-draft', { state: 'detached', timeout: 15_000 });
+  const art = bob.locator('.note', { hasText: '크게 쓴 바탕체' });
+  await art.waitFor({ timeout: 10_000 });
+  assert.deepEqual(await art.evaluate((el) => [el.dataset.font, el.style.getPropertyValue('--s'), el.querySelectorAll('.note__ink path').length]), ['batang', '1.7', 1]);
+  assert.match(await art.evaluate((el) => getComputedStyle(el.querySelector('.note__text')).fontFamily), /Gowun Batang/);
+
+  // 고칠 때 그림을 빼고, 글꼴과 크기를 원래대로 돌려요. (다음 글이 이 모양을 이어받지 않게)
+  await alice.locator('.note', { hasText: '크게 쓴 바탕체' }).dblclick();
+  await alice.waitForSelector('.is-draft .draft__pad:not([hidden]) path');
+  assert.equal(await alice.inputValue('#writeFont'), 'batang');
+  await alice.click('.is-draft .draft__undraw');
+  await alice.selectOption('#writeFont', 'pen');
+  await alice.click('#writeSmaller');
+  await alice.click('#writeSmaller');
+  await alice.click('#writeSubmit');
+  await alice.waitForSelector('.is-draft', { state: 'detached', timeout: 15_000 });
+  await bob.waitForFunction(() => {
+    const el = [...document.querySelectorAll('.note')].find((n) => n.textContent.includes('크게 쓴 바탕체'));
+    return el && !el.querySelector('.note__ink') && el.dataset.font === 'pen' && el.style.getPropertyValue('--s') === '1';
+  }, null, { timeout: 10_000 });
+
+  // 그림만 그려서 올릴 수도 있어요.
+  await bob.click('#writeBtn');
+  await bob.waitForSelector('.is-draft textarea');
+  await bob.click('#writeDraw');
+  await scribble(bob, [0.3, 0.3], [0.6, 0.6]);
+  await bob.click('#writeSubmit');
+  await bob.waitForSelector('.is-draft', { state: 'detached', timeout: 15_000 });
+  await alice.waitForFunction(() => [...document.querySelectorAll('.note')].some((n) => n.querySelector('.note__ink path') && n.getAttribute('aria-label') === '밥님의 그림'), null, { timeout: 10_000 });
+});
+
 test('Enter로 바로 올리고, Shift+Enter로 줄을 바꿔요', async () => {
   await alice.click('#writeBtn');
   const box = alice.locator('.is-draft textarea');
@@ -321,7 +386,7 @@ test('사진 파일이 아니면 알려 주고, 빈 글은 올리지 않아요',
   await alice.setInputFiles('#photoInput', { name: 'note.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') });
   await alice.waitForSelector('.toast >> text=사진 파일만');
   await alice.click('#writeSubmit');
-  await alice.waitForSelector('.toast >> text=내용을 적거나 사진을 넣어 주세요');
+  await alice.waitForSelector('.toast >> text=내용을 적거나 사진을 넣거나 그림을 그려 주세요');
   assert.equal(await alice.locator('.is-draft').count(), 1);
   await alice.click('#writeCancel');
   await alice.waitForSelector('.is-draft', { state: 'detached' });

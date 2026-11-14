@@ -310,7 +310,22 @@ function authErrorMessage(err) {
   return '글을 남길 준비를 하지 못했어요. 잠시 후 다시 시도해 주세요.';
 }
 
-async function submitNote({ mode, note, id, data, image, pos }) {
+// 새 보안 규칙(글꼴·크기·손그림)이 아직 게시되지 않았으면 거부돼요.
+// 기본 모양(손글씨, 1배, 그림 없음)이면 예전 모양 그대로 다시 저장해서 글쓰기가 멈추지 않게 해요.
+async function submitNote(args) {
+  try {
+    await saveNote(args);
+  } catch (err) {
+    if (err?.code !== 'permission-denied') throw err;
+    const { font, size, draw, ...plain } = args.data;
+    if (font !== 'pen' || size !== 1 || draw) {
+      throw Object.assign(new Error('글꼴·크기·손그림을 저장하려면 사이트 관리자가 새 보안 규칙을 게시해야 해요. 기본 모양으로는 올릴 수 있어요.'), { cause: err });
+    }
+    await saveNote({ ...args, data: plain });
+  }
+}
+
+async function saveNote({ mode, note, id, data, image, pos }) {
   if (mode === 'edit') {
     await state.store.updateNote(note, { ...data, x: pos.x, y: pos.y }, image);
     toast('고친 내용을 저장했어요.');

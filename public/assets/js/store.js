@@ -9,7 +9,7 @@
 //   profiles/{uid} 내 닉네임 (프로필 창에서 바꿔요)
 //   presence/{id}  지금 보는 사람. 브라우저마다 하나, 마지막으로 본 시각과 익명 id (+ 닉네임)
 
-import { accountAuthor } from './notes.js';
+import { accountAuthor, DRAW } from './notes.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/12.19.0';
 
@@ -191,8 +191,11 @@ export async function createStore(config) {
     async createNote(data, image, id = F.doc(notesCol).id) {
       const ref = noteRef(id);
       const batch = F.writeBatch(db);
+      // null인 칸(그림 없음 등)은 저장하지 않아요.
+      const clean = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== null && v !== undefined));
       const note = {
-        ...data,
+        ...clean,
+        ...(clean.draw ? { drawW: DRAW.w, drawH: DRAW.h } : {}),
         author: accountAuthor(session.user.nickname),
         ownerId: session.user.uid,
         createdAt: F.serverTimestamp(),
@@ -213,7 +216,13 @@ export async function createStore(config) {
       const { id } = note;
       const batch = F.writeBatch(db);
       const { author, ...editable } = patch;
-      const fields = { ...editable, updatedAt: F.serverTimestamp() };
+      // null인 칸은 지워요. (그림을 뺐을 때)
+      const fields = { updatedAt: F.serverTimestamp() };
+      for (const [k, v] of Object.entries(editable)) {
+        if (v !== undefined) fields[k] = v === null ? F.deleteField() : v;
+      }
+      if (editable.draw === null) Object.assign(fields, { drawW: F.deleteField(), drawH: F.deleteField() });
+      else if (editable.draw) Object.assign(fields, { drawW: DRAW.w, drawH: DRAW.h });
       if (image === null) {
         for (const k of ['img', 'imgType', 'imgW', 'imgH', 'imgFull', 'imgAnim']) fields[k] = F.deleteField();
       } else if (image) {

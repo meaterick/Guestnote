@@ -107,6 +107,24 @@ test('닉네임이 없으면 작성자는 익명이고, 저장한 이름은 본�
   await assertFails(updateDoc(doc(db, 'notes/legacy'), { author: '익명', updatedAt: serverTimestamp() }));
 });
 
+test('글꼴·크기는 정해진 것만, 손그림은 좌표 글자로 30,000자까지 받아요', async () => {
+  const db = as('alice');
+  const art = { draw: '10 20 30 40;100 100', drawW: 600, drawH: 450 };
+  await assertSucceeds(setDoc(doc(db, 'notes/look'), note({ font: 'batang', size: 1.7 })));
+  await assertSucceeds(setDoc(doc(db, 'notes/art'), note({ text: '', ...art })));
+  await assertFails(setDoc(doc(db, 'notes/f1'), note({ font: 'comic' })));
+  await assertFails(setDoc(doc(db, 'notes/f2'), note({ size: 5 })));
+  await assertFails(setDoc(doc(db, 'notes/f3'), note({ size: '1' })));
+  await assertFails(setDoc(doc(db, 'notes/d1'), note({ ...art, draw: '<script>' })));
+  await assertFails(setDoc(doc(db, 'notes/d2'), note({ ...art, draw: '1 '.repeat(15001) })));
+  await assertFails(setDoc(doc(db, 'notes/d3'), note({ ...art, drawW: 6000 })));
+  await assertFails(setDoc(doc(db, 'notes/d4'), note({ draw: '1 2' })));
+  await assertFails(setDoc(doc(db, 'notes/d5'), note({ drawW: 600, drawH: 450 })));
+  await assertFails(setDoc(doc(db, 'notes/d6'), note({ text: '', draw: '', drawW: 600, drawH: 450 })));
+  // 고칠 때 그림을 빼거나 크기를 바꿀 수 있어요.
+  await assertSucceeds(updateDoc(doc(db, 'notes/look'), { size: 0.6, font: 'jua', ...art, updatedAt: serverTimestamp() }));
+});
+
 test('어제나 내일 보드에는 남길 수 없어요', async () => {
   await assertFails(setDoc(doc(as('alice'), 'notes/n1'), note({ date: YESTERDAY })));
   await assertFails(setDoc(doc(as('alice'), 'notes/n2'), note({ date: TOMORROW })));

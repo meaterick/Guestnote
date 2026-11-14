@@ -1,9 +1,12 @@
 // 보드에 바로 쓰기
 // 빈 곳을 두 번 누르거나 '글 남기기'를 누르면 그 자리에 글상자가 열려요. 창을 띄우지 않고 보드 위에서 바로 써요.
-// 아래 도구 막대에서 모양(글자/메모장)과 색을 고르고, 사진을 넣은 뒤 '올리기'를 눌러요.
+// 아래 도구 막대에서 모양(글자/메모장), 색, 글꼴, 크기를 고르고, 사진을 넣거나 손그림을 그린 뒤 '올리기'를 눌러요.
 // 사진은 버튼, 끌어 놓기, 붙여 넣기로 넣을 수 있고, 올리기 전에 브라우저에서 줄여요.
 import { $, h, toast, errorMessage } from './ui.js';
-import { STYLES, TINTS, LIMITS, photoRatio, accountAuthor } from './notes.js';
+import {
+  STYLES, TINTS, LIMITS, FONTS, SIZES, DRAW, photoRatio, accountAuthor, applyLook, fontOf, sizeOf,
+  parseDraw, encodeDraw, pathOf, drawingSvg,
+} from './notes.js';
 import { compressImage, formatBytes, isSafeImageUrl, ImageError } from './image.js';
 
 const randomTilt = () => Math.round((Math.random() * 5 - 2.5) * 10) / 10 || 0.5;
@@ -30,6 +33,12 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
   const fileInput = $('#photoInput', bar);
   const cancelBtn = $('#writeCancel', bar);
   const submitBtn = $('#writeSubmit', bar);
+  const fontSelect = $('#writeFont', bar);
+  const smallerBtn = $('#writeSmaller', bar);
+  const biggerBtn = $('#writeBigger', bar);
+  const drawBtn = $('#writeDraw', bar);
+
+  fontSelect.replaceChildren(...FONTS.map((f) => h('option', { value: f.id, text: f.label })));
 
   tintBox.replaceChildren(...TINTS.map((t) => h('label', { class: 'swatch', title: t.label, dataset: { tint: t.id } },
     h('input', { type: 'radio', name: 'tint', value: t.id, 'aria-label': t.label }),
@@ -37,6 +46,8 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
 
   // 지금 쓰고 있는 글상자. 한 번에 하나만 열어요.
   let d = null;
+  // 마지막으로 올린 글의 글꼴과 크기를 다음 새 글에도 써요.
+  let lastLook = { font: 'pen', size: 1 };
 
   function build() {
     const text = h('textarea', {
@@ -50,8 +61,24 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     const fig = h('figure', { class: 'note__photo draft__photo', hidden: true },
       img, h('span', { class: 'draft__busy', text: '사진을 줄이는 중…' }), unphoto);
     const name = h('span', { class: 'note__sign draft__name', 'aria-label': '작성자' });
+    // 손그림 판: 누르고 끌면 선이 그려져요. 오른쪽 위에 되돌리기와 그림 빼기가 있어요.
+    const ink = drawingSvg([]);
+    const undo = h('button', { type: 'button', class: 'draft__undo', 'aria-label': '마지막 선 지우기', title: '마지막 선 지우기' });
+    undo.innerHTML = '<svg aria-hidden="true"><use href="#i-undo"/></svg>';
+    const undraw = h('button', { type: 'button', class: 'draft__undraw', 'aria-label': '그림 빼기', title: '그림 빼기' });
+    undraw.innerHTML = '<svg aria-hidden="true"><use href="#i-close"/></svg>';
+    const hint = h('p', { class: 'draft__pad-hint', text: '여기에 그려요' });
+    const pad = h('figure', { class: 'note__drawing draft__pad', hidden: true, 'aria-label': '손그림 판' },
+      ink, hint, h('div', { class: 'draft__pad-tools' }, undo, undraw));
     const el = h('div', { class: 'note is-draft', role: 'group', 'aria-label': '쓰는 중인 글' },
-      fig, grow, h('footer', { class: 'note__foot' }, name));
+      fig, pad, grow, h('footer', { class: 'note__foot' }, name));
+    undo.addEventListener('click', () => {
+      if (!d || d.busy) return;
+      d.strokes.pop();
+      paintInk();
+    });
+    undraw.addEventListener('click', () => setDrawing(false));
+    bindPad(pad, ink);
 
     text.addEventListener('input', () => {
       grow.dataset.value = text.value;
@@ -73,7 +100,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
       }
     });
     img.addEventListener('load', () => d && reveal());
-    return { el, text, grow, fig, img, name };
+    return { el, text, grow, fig, img, name, pad, ink, hint, undo };
   }
 
   // ---------- 자리와 보이기 ----------
@@ -186,6 +213,110 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     focus();
   }
 
+  // ---------- 글꼴, 크기 ----------
+  function setLook(font, size) {
+    d.font = fontOf(font).id;
+    d.size = sizeOf(size);
+    applyLook(d.el, { font: d.font, size: d.size });
+    sync();
+  }
+
+  function resize(step) {
+    if (!d || d.busy) return;
+    const i = SIZES.indexOf(d.size) + step;
+    if (i < 0 || i >= SIZES.length) return;
+    setLook(d.font, SIZES[i]);
+    // 자리를 직접 고르지 않은 글상자는 커진 크기로 빈자리를 다시 찾아요. (다른 글을 덮지 않게)
+    if (d.auto) {
+      const p = spotFor(null);
+      place(p.x, p.y);
+    }
+    board.reveal(rect());
+  }
+
+  // ---------- 손그림 ----------
+  function paintInk() {
+    if (!d) return;
+    const paths = d.strokes.map((pts) => {
+      const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      p.setAttribute('d', pathOf(pts));
+      return p;
+    });
+    d.ink.replaceChildren(...paths);
+    d.hint.hidden = d.strokes.length > 0;
+    d.undo.disabled = d.strokes.length === 0;
+  }
+
+  function setDrawing(on) {
+    if (!d || d.busy) return;
+    d.drawing = on;
+    if (!on) d.strokes = [];
+    d.pad.hidden = !on;
+    d.el.classList.toggle('has-drawing', on);
+    paintInk();
+    sync();
+    if (on) {
+      // 그릴 때는 키보드를 내려서 판이 가리지 않게 해요.
+      d.text.blur();
+      if (d.auto) {
+        const p = spotFor(null);
+        place(p.x, p.y);
+      }
+      board.reveal(rect());
+    } else {
+      focus();
+    }
+  }
+
+  function drawingText() {
+    return d.drawing ? encodeDraw(d.strokes) : '';
+  }
+
+  // 판 위에서 누르고 끌면 선을 그려요. 보드가 함께 움직이지 않게 이벤트를 여기서 멈춰요.
+  function bindPad(pad, ink) {
+    let live = null;
+    const point = (e) => {
+      const r = ink.getBoundingClientRect();
+      const x = Math.round(((e.clientX - r.left) / r.width) * DRAW.w);
+      const y = Math.round(((e.clientY - r.top) / r.height) * DRAW.h);
+      return [Math.max(0, Math.min(DRAW.w, x)), Math.max(0, Math.min(DRAW.h, y))];
+    };
+    pad.addEventListener('pointerdown', (e) => {
+      if (!d || d.busy || e.button > 0 || e.target.closest('button')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      pad.setPointerCapture(e.pointerId);
+      const pts = [point(e)];
+      d.strokes.push(pts);
+      live = { id: e.pointerId, pts };
+      paintInk();
+    });
+    pad.addEventListener('pointermove', (e) => {
+      if (!d || !live || e.pointerId !== live.id) return;
+      e.preventDefault();
+      const [x, y] = point(e);
+      const [lx, ly] = live.pts[live.pts.length - 1];
+      // 너무 촘촘한 점은 건너뛰어서 저장할 글자 수를 줄여요.
+      if (Math.abs(x - lx) + Math.abs(y - ly) < 4) return;
+      live.pts.push([x, y]);
+      if (encodeDraw(d.strokes).length > LIMITS.draw) {
+        live.pts.pop();
+        toast('그림이 너무 복잡해요. 몇 줄 지우고 다시 그려 주세요.');
+        live = null;
+        return;
+      }
+      const path = d.ink.lastElementChild;
+      if (path) path.setAttribute('d', pathOf(live.pts));
+    });
+    const end = (e) => {
+      if (live && e.pointerId === live.id) live = null;
+    };
+    pad.addEventListener('pointerup', end);
+    pad.addEventListener('pointercancel', end);
+    // 판 위에서 두 번 눌러도 보드가 새 글상자를 열지 않게 해요.
+    pad.addEventListener('dblclick', (e) => e.stopPropagation());
+  }
+
   // ---------- 도구 막대 ----------
   function sync() {
     if (!d) return;
@@ -194,6 +325,12 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     for (const input of bar.querySelectorAll('input[name="tint"]')) input.checked = input.value === d.tint;
     for (const input of bar.querySelectorAll('input')) input.disabled = d.busy;
     photoBtn.disabled = d.busy;
+    fontSelect.value = d.font;
+    fontSelect.disabled = d.busy;
+    smallerBtn.disabled = d.busy || d.size === SIZES[0];
+    biggerBtn.disabled = d.busy || d.size === SIZES[SIZES.length - 1];
+    drawBtn.disabled = d.busy;
+    drawBtn.setAttribute('aria-pressed', String(!!d.drawing));
     cancelBtn.disabled = d.busy;
     submitBtn.disabled = d.busy || d.compressing;
     submitBtn.textContent = d.busy ? (edit ? '저장하는 중…' : '올리는 중…') : (edit ? '저장' : '올리기');
@@ -208,11 +345,22 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
       board.reveal(rect());
     } else if (e.target.name === 'tint') {
       setTint(e.target.value);
+    } else if (e.target === fontSelect) {
+      setLook(fontSelect.value, d.size);
+      board.reveal(rect());
     }
+  });
+  smallerBtn.addEventListener('click', () => resize(-1));
+  biggerBtn.addEventListener('click', () => resize(1));
+  drawBtn.addEventListener('click', () => {
+    if (!d || d.busy) return;
+    if (!d.drawing) setDrawing(true);
+    else if (!d.strokes.length) setDrawing(false);
+    else board.reveal(rect());
   });
   // 도구를 눌러도 글상자의 커서가 그대로 있게 해요. (휴대폰 키보드가 내려가지 않게)
   bar.addEventListener('mousedown', (e) => {
-    if (d && e.target.closest('label, #writePhoto')) e.preventDefault();
+    if (d && e.target.closest('label, #writePhoto, .tools__size')) e.preventDefault();
   });
   bar.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && d) {
@@ -251,15 +399,25 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
       // image: undefined = 원래 사진 그대로, null = 사진 없음, 객체 = 새로 줄인 사진
       image: note ? undefined : null,
       working: 0, compressing: false, busy: false, x: 0, y: 0, style: 'text', tint: 'clear', rot: 0,
+      font: 'pen', size: 1, drawing: false, strokes: [],
       auto: !note && !at, // 자리를 직접 고르지 않았는지
     };
     setStyle(note?.type ?? 'text', note?.rot);
     setTint(note?.color ?? 'clear');
+    setLook(note?.font ?? lastLook.font, note?.size ?? lastLook.size);
     d.text.value = note?.text ?? '';
     d.grow.dataset.value = d.text.value;
     d.author = note ? note.author : accountAuthor(defaultAuthor);
     d.name.textContent = d.author;
     if (note && isSafeImageUrl(note.img)) showPhoto(isSafeImageUrl(photo) ? photo : note.img, photoRatio(note));
+    const strokes = parseDraw(note?.draw);
+    if (strokes.length) {
+      d.drawing = true;
+      d.strokes = strokes;
+      d.pad.hidden = false;
+      d.el.classList.add('has-drawing');
+      paintInk();
+    }
     layer.append(d.el);
     if (note) {
       board.hold(note.id);
@@ -305,14 +463,20 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     }
     const text = d.text.value.replace(/\s+$/, '').slice(0, LIMITS.text);
     const author = d.author;
-    if (!text.trim() && !hasPhoto()) {
-      toast('내용을 적거나 사진을 넣어 주세요.');
+    const draw = drawingText();
+    if (!text.trim() && !hasPhoto() && !draw) {
+      toast('내용을 적거나 사진을 넣거나 그림을 그려 주세요.');
       focus();
       return;
     }
     const { w, h: ht } = rect();
     const pos = board.clampPos(d.x, d.y, w, ht);
-    const data = { type: d.style, author, text: text.trim() ? text : '', color: d.tint, rot: d.rot };
+    // draw: null 이면 그림을 빼요. (고칠 때 원래 그림을 지워요)
+    const data = {
+      type: d.style, author, text: text.trim() ? text : '', color: d.tint, rot: d.rot, font: d.font, size: d.size,
+      draw: draw || null,
+    };
+    lastLook = { font: d.font, size: d.size };
     const draft = d;
     if (draft.mode === 'create') {
       // 저장되는 동안 보드에 먼저 나타나는 같은 글은 숨겨 두고, 글상자를 그대로 보여 줘요.
@@ -343,7 +507,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     focus,
     // 빈 곳을 눌렀을 때: 아무것도 안 쓴 새 글상자는 닫아요.
     dismissIfEmpty() {
-      if (d && d.mode === 'create' && !d.busy && !d.compressing && !d.text.value.trim() && !hasPhoto()) close();
+      if (d && d.mode === 'create' && !d.busy && !d.compressing && !d.text.value.trim() && !hasPhoto() && !d.strokes.length) close();
     },
     // 키보드가 올라오거나 화면 크기가 바뀌면 글상자가 보이게 옮겨요.
     reveal: () => reveal(),
@@ -358,7 +522,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
       return !!d;
     },
     get isEmpty() {
-      return !d || (!d.compressing && !d.text.value.trim() && !hasPhoto());
+      return !d || (!d.compressing && !d.text.value.trim() && !hasPhoto() && !d.strokes.length);
     },
     get editingId() {
       return d?.mode === 'edit' ? d.note.id : null;

@@ -552,18 +552,18 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
 /* 글자: 보드에 바로 쓴 글씨. 색을 고르면 잉크 색이 바뀌어요. */
 .note--text {
   width: max-content;
-  max-width: 340px;
+  max-width: calc(340px * var(--s, 1));
   padding: 6px 10px 8px;
   border-radius: 14px;
 }
 .note--text:not([data-tint="clear"]) { color: oklch(var(--ink-tint-l) calc(var(--ink-tint-c) * var(--tc, 0)) var(--t, 250)); }
 .note--text .note__text {
-  font-family: var(--font-hand);
-  font-size: 42px;
-  line-height: 1.1;
+  font-family: var(--ff, var(--font-hand));
+  font-size: calc(42px * var(--s, 1) * var(--fs, 1));
+  line-height: 1.15;
   text-shadow: var(--text-lift);
 }
-.note--text.has-photo { width: 280px; }
+.note--text.has-photo, .note--text.has-drawing { width: calc(280px * var(--s, 1)); }
 .note--text .note__photo { margin: 2px 0 8px; border-radius: 14px; box-shadow: var(--shadow-1); }
 @media (hover: hover) {
   .note--text:not(.is-draft):hover { background-color: color-mix(in oklch, var(--soft-fill) 70%, transparent); }
@@ -571,7 +571,7 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
 
 /* 메모장: 줄이 그어진 유리 메모지 */
 .note--memo {
-  width: 240px;
+  width: calc(240px * var(--s, 1));
   padding: 14px 16px 10px;
   border-radius: var(--r-note);
   border: 1px solid var(--glass-edge);
@@ -595,11 +595,28 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
 .note--memo.is-dragging { box-shadow: inset 0 1px 0 var(--glass-shine), inset 0 0 0 1px var(--glass-edge-low), var(--shadow-2); }
 .note--memo .note__photo { margin: -4px -6px 12px; }
 .note--memo .note__text {
-  font-family: var(--font-hand);
-  font-size: 31px;
-  line-height: 36px;
-  background-image: repeating-linear-gradient(to bottom, transparent 0 35px, var(--rule) 35px 36px);
+  --lh: calc(36px * var(--s, 1));
+  font-family: var(--ff, var(--font-hand));
+  font-size: calc(31px * var(--s, 1) * var(--fs, 1));
+  line-height: var(--lh);
+  background-image: repeating-linear-gradient(to bottom, transparent 0 calc(var(--lh) - 1px), var(--rule) calc(var(--lh) - 1px) var(--lh));
 }
+/* 이름 서명도 크기를 따라가요. (너무 작거나 크지 않게) */
+.note__foot { font-size: calc(22px * clamp(0.8, var(--s, 1), 1.5)); }
+
+/* ---------- 손그림 ---------- */
+.note__drawing { position: relative; margin: 0 0 6px; aspect-ratio: 4 / 3; }
+.note__ink { display: block; width: 100%; height: 100%; overflow: visible; }
+.note__ink path { fill: none; stroke: currentColor; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+.note--text .note__ink { filter: drop-shadow(0 1px 0 rgb(255 255 255 / 0.25)); }
+/* 그리는 중인 판: 점선 테두리로 그릴 곳을 보여 주고, 손가락으로 그려도 보드가 움직이지 않게 해요. */
+.draft__pad { border-radius: 12px; outline: 1.5px dashed color-mix(in oklch, var(--ink) 35%, transparent); outline-offset: -1px; background: color-mix(in oklch, var(--soft-fill) 60%, transparent); touch-action: none; cursor: crosshair; -webkit-user-select: none; user-select: none; }
+.draft__pad .note__ink { pointer-events: none; }
+.draft__pad-tools { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; }
+.draft__pad-tools button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: var(--glass-fill-strong); color: var(--ink); box-shadow: var(--shadow-1); font-size: 15px; }
+.draft__pad-tools button:disabled { opacity: 0.4; }
+.draft__pad-tools svg { width: 16px; height: 16px; }
+.draft__pad-hint { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font-size: 15px; color: var(--ink-3); pointer-events: none; }
 .note--memo .note__foot { justify-content: flex-end; }
 
 /* ---------- 보드에 바로 쓰는 글상자 ---------- */
@@ -692,6 +709,8 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
   translate: -50% 0;
   display: flex;
   justify-content: center;
+  /* left: 50% 때문에 폭이 화면 절반으로 줄지 않게 내용만큼 넓혀요. */
+  width: max-content;
   max-width: calc(100vw - 16px);
 }
 
@@ -768,6 +787,28 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
 .tools .seg { margin: 0; }
 .tools__style { flex: none; width: 148px; }
 .tools__end { display: flex; gap: 6px; flex: none; }
+.tools .tools__tints { flex: none; flex-wrap: nowrap; }
+@media (min-width: 721px) and (max-width: 1020px) {
+  .tools { flex-wrap: wrap; justify-content: center; row-gap: 6px; border-radius: 28px; }
+}
+.tools__look { display: flex; align-items: center; gap: 2px; flex: none; }
+.tools__font {
+  height: 34px;
+  padding: 0 26px 0 12px;
+  border: 1px solid var(--glass-edge-low);
+  border-radius: 999px;
+  background: var(--soft-fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M7 10l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 8px center / 14px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.tools__font option { color: #1e2440; background: #fff; }
+.size-glyph { font-weight: 700; line-height: 1; }
+.size-glyph--s { font-size: 12px; }
+.size-glyph--l { font-size: 19px; }
+.tools__draw[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .swatches--small { flex-wrap: nowrap; gap: 7px; padding: 0 2px; }
 .swatches--small .swatch { width: 26px; height: 26px; }
 .swatches--small .swatch input:checked + .swatch__chip { outline-width: 2px; outline-offset: 2px; }
@@ -1097,6 +1138,8 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
     border-radius: 24px;
   }
   .tools__tints { order: 5; width: 100%; justify-content: space-around; }
+  .tools__look { order: 6; width: 100%; justify-content: space-around; }
+  .tools__look .tools__font { flex: 1; max-width: 9em; }
 
   .modal, .modal--calendar, .modal--menu {
     width: 100%;
