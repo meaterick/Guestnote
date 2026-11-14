@@ -165,6 +165,13 @@ test('글꼴과 크기를 고르면 다른 사람에게도 그대로 보여요',
   assert.equal(await alice.inputValue('#writeFont'), 'pen', '기본 글꼴은 손글씨예요');
   await alice.selectOption('#writeFont', 'batang');
   const width = async () => (await alice.locator('.is-draft').boundingBox()).width;
+  await alice.fill('.is-draft textarea', '크게');
+  const normal = await width();
+  await alice.click('#writeSmaller');
+  await alice.click('#writeSmaller');
+  assert.ok(await width() < normal * 0.85, `작게 하면 글상자도 작아져요: ${normal} → ${await width()}`);
+  await alice.click('#writeBigger');
+  await alice.click('#writeBigger');
   await alice.fill('.is-draft textarea', '크게 쓴 바탕체');
   const small = await width();
   await alice.click('#writeBigger');
@@ -268,6 +275,18 @@ test('내 글을 고르면 모서리 손잡이가 생기고, 끌면 크기가 �
   await bob.waitForFunction(() => {
     const el = [...document.querySelectorAll('.note')].find((n) => n.textContent.includes('모서리로 키워요'));
     return el && Number(el.style.getPropertyValue('--s')) > 1.4;
+  }, null, { timeout: 10_000 });
+  // 안쪽으로 끌면 원래보다 작아져요.
+  const g2 = await alice.locator('.note-grip').boundingBox();
+  await alice.mouse.move(g2.x + g2.width / 2, g2.y + g2.height / 2);
+  await alice.mouse.down();
+  for (let i = 1; i <= 8; i++) await alice.mouse.move(g2.x + g2.width / 2 - i * 30, g2.y + g2.height / 2 - i * 12);
+  await alice.mouse.up();
+  const smaller = await mine.boundingBox();
+  assert.ok(smaller.width < before.width * 0.8, `작아졌어요: ${before.width} → ${smaller.width}`);
+  await bob.waitForFunction(() => {
+    const el = [...document.querySelectorAll('.note')].find((n) => n.textContent.includes('모서리로 키워요'));
+    return el && Number(el.style.getPropertyValue('--s')) < 0.8;
   }, null, { timeout: 10_000 });
   // 남의 글을 고르면 손잡이가 없어요.
   await bob.locator('.note', { hasText: '모서리로 키워요' }).click();

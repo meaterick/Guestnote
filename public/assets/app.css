@@ -587,7 +587,8 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
   -webkit-touch-callout: default;
 }
 .note--text.is-draft {
-  min-width: 240px;
+  /* 작게 하면 빈 글상자도 함께 작아져요. */
+  min-width: calc(240px * min(var(--s, 1), 1));
   background-color: color-mix(in oklch, var(--glass-fill) 75%, transparent);
 }
 .note.is-draft, .note.is-draft * { -webkit-user-select: text; user-select: text; }
