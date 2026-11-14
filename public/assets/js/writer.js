@@ -4,7 +4,7 @@
 // 사진은 버튼, 끌어 놓기, 붙여 넣기로 넣을 수 있고, 올리기 전에 브라우저에서 줄여요.
 import { $, h, toast, errorMessage } from './ui.js';
 import {
-  STYLES, TINTS, LIMITS, FONTS, SIZES, DRAW, photoRatio, applyLook, fontOf, sizeOf,
+  STYLES, TINTS, LIMITS, FONTS, SIZES, DRAW, PEN, photoRatio, applyLook, fontOf, sizeOf, penOf,
   parseDraw, encodeDraw, pathOf, drawingSvg, isInk,
 } from './notes.js';
 import { compressImage, formatBytes, isSafeImageUrl, ImageError } from './image.js';
@@ -38,6 +38,9 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
   const biggerBtn = $('#writeBigger', bar);
   const undoBtn = $('#writeUndo', bar);
   const clearBtn = $('#writeClear', bar);
+  const penInput = $('#writePen', bar);
+  penInput.min = String(PEN.min);
+  penInput.max = String(PEN.max);
 
   fontSelect.replaceChildren(...FONTS.map((f) => h('option', { value: f.id, text: f.label })));
 
@@ -48,7 +51,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
   // 지금 쓰고 있는 글상자. 한 번에 하나만 열어요.
   let d = null;
   // 마지막으로 올린 글의 글꼴과 크기를 다음 새 글에도 써요.
-  let lastLook = { style: 'text', font: 'pen', size: 1 };
+  let lastLook = { style: 'text', font: 'pen', size: 1, pen: PEN.default };
 
   function build() {
     const text = h('textarea', {
@@ -211,13 +214,11 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
 
   function resize(step) {
     if (!d || d.busy) return;
-    const i = SIZES.indexOf(d.size) + step;
-    if (i < 0 || i >= SIZES.length) return;
-    setLook(d.font, SIZES[i]);
-    if (d.drawing) {
-      paintInk();
-      return;
-    }
+    // 모서리로 자유롭게 바꾼 크기에서도 가까운 다음 단계로 가요.
+    const next = step > 0 ? SIZES.find((v) => v > d.size + 0.001) : [...SIZES].reverse().find((v) => v < d.size - 0.001);
+    if (next === undefined) return;
+    setLook(d.font, next);
+
     // 자리를 직접 고르지 않은 글상자는 커진 크기로 빈자리를 다시 찾아요. (다른 글을 덮지 않게)
     if (d.auto) {
       const p = spotFor(null);
@@ -232,7 +233,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
   const inkLayer = drawingSvg([], board.world.w, board.world.h);
   inkLayer.classList.add('ink-layer', 'note--text');
   layer.append(inkLayer);
-  const strokeWidth = () => DRAW.stroke * (d?.size ?? 1);
+  const strokeWidth = () => d?.pen ?? PEN.default;
 
   function paintInk() {
     const paths = (d?.strokes ?? []).map((pts) => {
@@ -312,6 +313,11 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     const edit = d.mode === 'edit';
     const shown = d.drawing ? 'draw' : d.style;
     undoBtn.hidden = !d.drawing;
+    penInput.parentElement.hidden = !d.drawing;
+    penInput.value = String(d.pen);
+    penInput.disabled = d.busy;
+    smallerBtn.hidden = d.drawing;
+    biggerBtn.hidden = d.drawing;
     clearBtn.hidden = !d.drawing;
     undoBtn.disabled = d.busy || !d.strokes.length;
     clearBtn.disabled = d.busy || !d.strokes.length;
@@ -323,8 +329,8 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     photoBtn.disabled = d.busy;
     fontSelect.value = d.font;
     fontSelect.disabled = d.busy;
-    smallerBtn.disabled = d.busy || d.size === SIZES[0];
-    biggerBtn.disabled = d.busy || d.size === SIZES[SIZES.length - 1];
+    smallerBtn.disabled = d.busy || d.size <= SIZES[0];
+    biggerBtn.disabled = d.busy || d.size >= SIZES[SIZES.length - 1];
     cancelBtn.disabled = d.busy;
     submitBtn.disabled = d.busy || d.compressing;
     submitBtn.textContent = d.busy ? (edit ? '저장하는 중…' : '올리는 중…') : (edit ? '저장' : '올리기');
@@ -348,6 +354,13 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     }
   });
   smallerBtn.addEventListener('click', () => resize(-1));
+  // 선 굵기 슬라이더: 앞으로 그을 선부터 굵기가 바뀌어요. (한 그림 안의 선은 모두 같은 굵기로 저장해요)
+  penInput.addEventListener('input', () => {
+    if (!d || d.busy) return;
+    d.pen = penOf(Number(penInput.value));
+    lastLook = { ...lastLook, pen: d.pen };
+    paintInk();
+  });
   undoBtn.addEventListener('click', () => {
     if (!d || d.busy) return;
     d.strokes.pop();
@@ -400,7 +413,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
       // image: undefined = 원래 사진 그대로, null = 사진 없음, 객체 = 새로 줄인 사진
       image: note ? undefined : null,
       working: 0, compressing: false, busy: false, x: 0, y: 0, style: 'text', tint: 'clear', rot: 0,
-      font: 'pen', size: 1, drawing: false, strokes: [], keep: null,
+      font: 'pen', size: 1, pen: lastLook.pen, drawing: false, strokes: [], keep: null,
       auto: !note && !at, // 자리를 직접 고르지 않았는지
     };
     // 보드에 그린 그림은 그림 모드로 열어요. 새 글은 마지막에 쓴 모드로 열어요.
@@ -413,7 +426,10 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     if (note && isSafeImageUrl(note.img)) showPhoto(isSafeImageUrl(photo) ? photo : note.img, photoRatio(note));
     if (ink) {
       // 그림 상자 안의 좌표를 보드 좌표로 되돌려서 이어 그릴 수 있게 해요.
-      d.strokes = parseDraw(note.draw, note.drawW, note.drawH).map((pts) => pts.map(([x, y]) => [x + note.x, y + note.y]));
+      // 모서리로 키운 그림은 보이는 크기 그대로 이어 그려요. (올리면 그 크기가 새 원래 크기가 돼요)
+      const k = sizeOf(note.size);
+      d.strokes = parseDraw(note.draw, note.drawW, note.drawH).map((pts) => pts.map(([x, y]) => [Math.round(x * k + note.x), Math.round(y * k + note.y)]));
+      d.pen = penOf(Math.round(penOf(note.pen) * k));
       paintInk();
     } else if (note?.draw) {
       // 글과 함께 있는 예전 그림은 고치는 동안 그대로 둬요.
@@ -477,7 +493,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
       }
       pos = { x: ink.x, y: ink.y };
       data = {
-        type: 'text', text: '', color: d.tint, rot: 0, font: d.font, size: d.size,
+        type: 'text', text: '', color: d.tint, rot: 0, font: d.font, size: 1, pen: d.pen,
         draw: ink.draw, drawW: ink.w, drawH: ink.h,
       };
       image = d.mode === 'create' ? null : undefined;
@@ -493,7 +509,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
       // draw: null 이면 그림 칸을 지워요.
       data = {
         type: d.style, text: text.trim() ? text : '', color: d.tint, rot: d.rot, font: d.font, size: d.size,
-        draw: d.keep?.draw ?? null, drawW: d.keep?.drawW ?? null, drawH: d.keep?.drawH ?? null,
+        draw: d.keep?.draw ?? null, drawW: d.keep?.drawW ?? null, drawH: d.keep?.drawH ?? null, pen: null,
       };
     }
     lastLook = { style: d.drawing ? 'draw' : d.style, font: d.font, size: d.size };

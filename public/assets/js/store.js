@@ -227,6 +227,11 @@ export async function createStore(config) {
       if (image?.full) fullImages.set(id, image.full.dataUrl);
     },
 
+    // 모서리 손잡이로 바꾼 크기만 저장해요.
+    async resizeNote(id, size) {
+      await F.updateDoc(noteRef(id), { size, updatedAt: F.serverTimestamp() });
+    },
+
     async moveNote(id, pos) {
       await F.updateDoc(noteRef(id), { x: pos.x, y: pos.y, z: pos.z, updatedAt: F.serverTimestamp() });
     },

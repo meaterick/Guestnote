@@ -31,9 +31,17 @@ export const FONTS = [
 ];
 export const fontOf = (id) => FONTS.find((f) => f.id === id) ?? FONTS[0];
 
-// 글자·사진·그림 크기 (1 = 기본). 보안 규칙의 목록과 같아요.
-export const SIZES = [0.6, 0.8, 1, 1.3, 1.7, 2.2];
-export const sizeOf = (v) => (SIZES.includes(v) ? v : 1);
+// 글자·사진·그림 크기 (1 = 기본). '가' 버튼은 SIZES 단계로, 모서리 손잡이는 SIZE_RANGE 안에서 자유롭게 바꿔요.
+// 보안 규칙의 범위와 같아요.
+export const SIZE_RANGE = { min: 0.5, max: 3 };
+export const SIZES = [0.6, 0.8, 1, 1.3, 1.7, 2.2, 3];
+export const sizeOf = (v) => (typeof v === 'number' && Number.isFinite(v)
+  ? Math.min(SIZE_RANGE.max, Math.max(SIZE_RANGE.min, v))
+  : 1);
+
+// 선 굵기 (보드 픽셀, 그림 모드의 슬라이더)
+export const PEN = { min: 1, max: 30, default: 6 };
+export const penOf = (v) => (Number.isInteger(v) ? Math.min(PEN.max, Math.max(PEN.min, v)) : PEN.default);
 
 // 손그림: 보드에 바로 그린 선이에요. 좌표를 'x y x y …' 로 적고 선 사이는 ';' 로 나눠요.
 // 좌표는 그림 상자(drawW × drawH, 보드 픽셀) 안의 정수예요. 사진처럼 무겁지 않고, 크게 봐도 선명해요.
@@ -97,8 +105,8 @@ function content(note, photo) {
     fig.style.aspectRatio = `${dw} / ${dh}`;
     // 보드에 바로 그린 그림(글·사진 없이)은 그린 크기 그대로 그 자리에 보여요.
     if (isInk(note)) {
-      fig.style.width = `${dw}px`;
-      fig.style.height = `${dh}px`;
+      fig.style.width = `calc(${dw}px * var(--s, 1))`;
+      fig.style.setProperty('--pen', String(penOf(note.pen)));
     }
     parts.push(fig);
   }
@@ -116,7 +124,7 @@ const painted = new WeakMap();
 export function paintNote(el, note, ctx) {
   const photo = ctx.photo?.(note) || note.img;
   // 내용이 그대로면 다시 그리지 않아요. (사진이 깜빡이지 않게)
-  const sig = [note.text, photo, note.imgW, note.imgH, note.draw, note.drawW, note.drawH];
+  const sig = [note.text, photo, note.imgW, note.imgH, note.draw, note.drawW, note.drawH, note.pen];
   const prev = painted.get(el);
   if (!prev || prev.some((v, i) => v !== sig[i])) {
     painted.set(el, sig);

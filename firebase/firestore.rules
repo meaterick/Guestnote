@@ -72,10 +72,11 @@ service cloud.firestore {
         && ('img' in d || (!('imgType' in d) && !('imgW' in d) && !('imgH' in d) && !('imgFull' in d) && !('imgAnim' in d)));
     }
 
-    // 글꼴과 크기 (없으면 손글씨, 1배). 화면의 FONTS, SIZES 와 같아요.
+    // 글꼴, 크기(0.5~3배, 없으면 1배), 그림 선 굵기(1~30). 화면의 FONTS, SIZE_RANGE, PEN 과 같아요.
     function validLook(d) {
       return (!('font' in d) || d.font in ['pen', 'brush', 'dodum', 'batang', 'jua'])
-        && (!('size' in d) || d.size in [0.6, 0.8, 1, 1.3, 1.7, 2.2]);
+        && (!('size' in d) || (d.size is number && d.size >= 0.5 && d.size <= 3))
+        && (!('pen' in d) || (d.pen is int && d.pen >= 1 && d.pen <= 30));
     }
 
     // 손그림: 'x y x y …;x y …' 모양의 좌표 글자 (30,000자까지). 그림 상자 크기는 보드 안 (4000 x 2600까지)
@@ -89,7 +90,7 @@ service cloud.firestore {
 
     function validNote(d) {
       return d.keys().hasAll(['date', 'type', 'author', 'text', 'color', 'x', 'y', 'z', 'rot', 'ownerId', 'createdAt', 'updatedAt'])
-        && d.keys().hasOnly(['date', 'type', 'author', 'text', 'color', 'x', 'y', 'z', 'rot', 'ownerId', 'createdAt', 'updatedAt', 'img', 'imgType', 'imgW', 'imgH', 'imgFull', 'imgAnim', 'font', 'size', 'draw', 'drawW', 'drawH'])
+        && d.keys().hasOnly(['date', 'type', 'author', 'text', 'color', 'x', 'y', 'z', 'rot', 'ownerId', 'createdAt', 'updatedAt', 'img', 'imgType', 'imgW', 'imgH', 'imgFull', 'imgAnim', 'font', 'size', 'pen', 'draw', 'drawW', 'drawH'])
         && validLook(d)
         && validDrawing(d)
         && isDayKey(d.date)

@@ -1,6 +1,6 @@
 // 큰 보드: 끌어서 둘러보기, 확대/축소, 글 고르기, 내 글 옮기기
 import { clamp } from './ui.js';
-import { createNoteElement, paintNote } from './notes.js';
+import { createNoteElement, paintNote, sizeOf, SIZE_RANGE } from './notes.js';
 
 // 보드 크기. firestore.rules 의 좌표 범위와 같아야 해요.
 const WORLD = { w: 4000, h: 2600 };
@@ -75,6 +75,29 @@ export function createBoard({ viewport, world, layer, handlers }) {
 
   function apply() {
     world.style.transform = `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.s})`;
+    // 크기 손잡이는 확대해도 화면에서 같은 크기로 보여요.
+    grip.style.scale = String(1 / view.s);
+  }
+
+  // ---------- 크기 손잡이: 고른 내 글의 오른쪽 아래 모서리 ----------
+  const grip = document.createElement('button');
+  grip.type = 'button';
+  grip.className = 'note-grip';
+  grip.hidden = true;
+  grip.setAttribute('aria-label', '모서리를 끌어 크기 조절');
+  grip.title = '끌어서 크기 조절';
+  layer.append(grip);
+
+  function syncGrip() {
+    const item = selectedId ? items.get(selectedId) : null;
+    const show = !!item && !held.has(selectedId) && !!ctx.canResize?.(item.note)
+      && !(gesture?.type === 'note' && gesture.moved);
+    grip.hidden = !show;
+    if (!show) return;
+    const x = (gesture?.type === 'note' ? gesture.pos.x : item.note.x) + item.el.offsetWidth;
+    const y = (gesture?.type === 'note' ? gesture.pos.y : item.note.y) + item.el.offsetHeight;
+    grip.style.translate = `${x}px ${y}px`;
+    if (!grip.isConnected || grip.nextSibling) layer.append(grip);
   }
 
   function stopAnim() {
@@ -251,6 +274,7 @@ export function createBoard({ viewport, world, layer, handlers }) {
       }
     }
     settled = true;
+    syncGrip();
   }
 
   function reset() {
@@ -266,17 +290,20 @@ export function createBoard({ viewport, world, layer, handlers }) {
   function hold(id) {
     held.add(id);
     items.get(id)?.el.classList.add('is-held');
+    syncGrip();
   }
 
   function release(id) {
     held.delete(id);
     items.get(id)?.el.classList.remove('is-held');
+    syncGrip();
   }
 
   function select(id) {
     if (selectedId) items.get(selectedId)?.el.classList.remove('is-selected');
     selectedId = id;
     if (id) items.get(id)?.el.classList.add('is-selected');
+    syncGrip();
   }
 
   // ---------- 빈자리 찾기 ----------
@@ -308,9 +335,25 @@ export function createBoard({ viewport, world, layer, handlers }) {
     const next = { x: Math.round(pos.x), y: Math.round(pos.y), z: maxZ };
     place(item.el, next.x, next.y);
     item.el.style.zIndex = String(next.z);
+    item.note = { ...item.note, ...next };
+    syncGrip();
     Promise.resolve(handlers.onMove(item.note, next)).catch(() => {
       place(item.el, item.note.x, item.note.y);
       item.el.style.zIndex = String(Number(item.note.z) || 0);
+    });
+  }
+
+  function finishResize(g) {
+    const { item } = g;
+    item.el.classList.remove('is-resizing');
+    if (g.size === g.s0) return;
+    const before = item.note;
+    item.note = { ...before, size: g.size };
+    syncGrip();
+    Promise.resolve(handlers.onResize?.(before, g.size)).catch(() => {
+      item.note = before;
+      paintNote(item.el, before, ctx);
+      syncGrip();
     });
   }
 
@@ -379,6 +422,15 @@ export function createBoard({ viewport, world, layer, handlers }) {
     }
     if (pointers.size > 2) return;
     const start = { x: e.clientX, y: e.clientY };
+    if (e.target === grip && selectedId && items.has(selectedId)) {
+      const item = items.get(selectedId);
+      gesture = {
+        type: 'resize', pid: e.pointerId, item, from: toWorld(e.clientX, e.clientY),
+        w0: item.el.offsetWidth || 1, h0: item.el.offsetHeight || 1, s0: sizeOf(item.note.size), size: sizeOf(item.note.size),
+      };
+      item.el.classList.add('is-resizing');
+      return;
+    }
     if (ink && e.button === 0) {
       gesture = { type: 'ink', pid: e.pointerId, start };
       ink.start(toWorld(e.clientX, e.clientY));
@@ -405,6 +457,7 @@ export function createBoard({ viewport, world, layer, handlers }) {
       y: clamp(w.y - g.grab.y, 0, WORLD.h - Math.min(el.offsetHeight, 160)),
     };
     place(el, g.pos.x, g.pos.y);
+    syncGrip();
   }
 
   // 글을 화면 가장자리로 끌고 가면 보드가 따라 움직여요.
@@ -437,6 +490,15 @@ export function createBoard({ viewport, world, layer, handlers }) {
     if (!g) return;
     if (g.type === 'pinch') return pointers.size >= 2 && updatePinch();
     if (g.type === 'idle' || g.pid !== e.pointerId) return;
+    if (g.type === 'resize') {
+      // 모서리를 끈 만큼(가로·세로 평균) 크기를 바꿔요. 원래 크기의 비율로 계산해요.
+      const w = toWorld(e.clientX, e.clientY);
+      const f = ((g.w0 + w.x - g.from.x) / g.w0 + (g.h0 + w.y - g.from.y) / g.h0) / 2;
+      g.size = Math.round(clamp(g.s0 * f, SIZE_RANGE.min, SIZE_RANGE.max) * 100) / 100;
+      g.item.el.style.setProperty('--s', String(g.size));
+      syncGrip();
+      return;
+    }
     if (g.type === 'ink') {
       // 빠르게 그어도 선이 매끄럽게 이어지도록 사이에 생긴 점도 받아요.
       const events = e.getCoalescedEvents?.() ?? [];
@@ -478,6 +540,10 @@ export function createBoard({ viewport, world, layer, handlers }) {
       ink?.end();
       return;
     }
+    if (g.type === 'resize') {
+      finishResize(g);
+      return;
+    }
     viewport.classList.remove('is-panning');
     if (g.type === 'note') {
       g.item.el.classList.remove('is-dragging');
@@ -492,6 +558,11 @@ export function createBoard({ viewport, world, layer, handlers }) {
     pointers.delete(e.pointerId);
     const g = gesture;
     if (g?.type === 'ink') ink?.cancel();
+    if (g?.type === 'resize') {
+      g.item.el.classList.remove('is-resizing');
+      paintNote(g.item.el, g.item.note, ctx);
+      syncGrip();
+    }
     if (g?.type === 'note') {
       g.item.el.classList.remove('is-dragging');
       place(g.item.el, g.item.note.x, g.item.note.y);

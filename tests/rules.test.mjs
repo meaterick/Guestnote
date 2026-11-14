@@ -115,6 +115,12 @@ test('글꼴·크기는 정해진 것만, 손그림은 좌표 글자로 30,000�
   await assertFails(setDoc(doc(db, 'notes/f1'), note({ font: 'comic' })));
   await assertFails(setDoc(doc(db, 'notes/f2'), note({ size: 5 })));
   await assertFails(setDoc(doc(db, 'notes/f3'), note({ size: '1' })));
+  await assertSucceeds(setDoc(doc(db, 'notes/f4'), note({ size: 1.37, pen: 12 })));
+  await assertFails(setDoc(doc(db, 'notes/f5'), note({ size: 0.4 })));
+  for (const [i, pen] of [0, 31, 2.5, '6'].entries()) await assertFails(setDoc(doc(db, `notes/p${i}`), note({ pen })));
+  // 모서리로 크기만 바꾸기: 내 글만 돼요.
+  await assertSucceeds(updateDoc(doc(db, 'notes/f4'), { size: 2.41, updatedAt: serverTimestamp() }));
+  await assertFails(updateDoc(doc(as('bob'), 'notes/f4'), { size: 0.8, updatedAt: serverTimestamp() }));
   await assertFails(setDoc(doc(db, 'notes/d1'), note({ ...art, draw: '<script>' })));
   await assertFails(setDoc(doc(db, 'notes/d2'), note({ ...art, draw: '1 '.repeat(15001) })));
   await assertFails(setDoc(doc(db, 'notes/d3'), note({ ...art, drawW: 6000 })));

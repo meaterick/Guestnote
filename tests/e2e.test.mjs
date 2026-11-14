@@ -200,6 +200,11 @@ test('그림 모드에서는 칸 없이 보드에 바로 그리고, 그린 자�
   await alice.waitForSelector('#viewport.is-inking');
   assert.equal(await alice.isHidden('.is-draft'), true, '그림 모드에서는 글상자(그림 칸)가 없어요');
   assert.equal(await alice.locator('text=여기에 그려요').count(), 0);
+  // 선 굵기는 슬라이더로 정해요. (그림 모드에서는 '가' 버튼 대신 슬라이더가 보여요)
+  assert.equal(await alice.isVisible('#writePen'), true);
+  assert.equal(await alice.isVisible('#writeBigger'), false);
+  await alice.locator('#writePen').fill('14');
+  assert.equal(await alice.evaluate(() => getComputedStyle(document.querySelector('.ink-layer')).getPropertyValue('--ink-w').trim()), '14px');
   // 빈 곳을 골라 두 줄 긋고, 하나 되돌려요. 끌어도 보드는 움직이지 않아요.
   const spot = await emptySpot(alice);
   const view = await alice.evaluate(() => getComputedStyle(document.querySelector('#world')).transform);
@@ -220,6 +225,7 @@ test('그림 모드에서는 칸 없이 보드에 바로 그리고, 그린 자�
     return { x: r.x, y: r.y, w: r.width, h: r.height, label: el.getAttribute('aria-label') };
   });
   assert.equal(box.label, '그림');
+  assert.equal(await alice.evaluate(() => [...document.querySelectorAll('.note.is-ink')].at(-1).querySelector('.note__drawing').style.getPropertyValue('--pen')), '14');
   assert.ok(Math.abs(box.x - spot.x) < 20 && Math.abs(box.y - spot.y) < 20, `그린 자리 그대로예요: ${JSON.stringify(box)} / ${JSON.stringify(spot)}`);
   assert.ok(box.w > 100 && box.w < 160 && box.h > 35 && box.h < 80, `그린 크기만큼이에요: ${JSON.stringify(box)}`);
 
@@ -232,6 +238,38 @@ test('그림 모드에서는 칸 없이 보드에 바로 그리고, 그린 자�
   assert.equal(await alice.evaluate(() => document.querySelector('#viewport').classList.contains('is-inking')), false);
   await alice.click('#writeCancel');
   await alice.waitForSelector('.is-draft', { state: 'detached' });
+});
+
+test('내 글을 고르면 모서리 손잡이가 생기고, 끌면 크기가 바뀌어요 (남의 글은 손잡이가 없어요)', async () => {
+  await write(alice, { text: '모서리로 키워요' });
+  const mine = alice.locator('.note', { hasText: '모서리로 키워요' });
+  await mine.click();
+  await alice.waitForSelector('.note-grip:not([hidden])');
+  const before = await mine.boundingBox();
+  const grip = await alice.locator('.note-grip').boundingBox();
+  assert.ok(Math.abs(grip.x + grip.width / 2 - (before.x + before.width)) < 24, '손잡이는 오른쪽 아래 모서리에 있어요');
+  await alice.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await alice.mouse.down();
+  for (let i = 1; i <= 6; i++) await alice.mouse.move(grip.x + grip.width / 2 + i * 25, grip.y + grip.height / 2 + i * 12);
+  await alice.mouse.up();
+  const after = await mine.boundingBox();
+  assert.ok(after.width > before.width * 1.4, `커졌어요: ${before.width} → ${after.width}`);
+  assert.ok(Math.abs(after.x - before.x) < 4 && Math.abs(after.y - before.y) < 4, '왼쪽 위 자리는 그대로예요');
+  // 다른 사람 화면에도 같은 크기로 바뀌어요.
+  await bob.waitForFunction(() => {
+    const el = [...document.querySelectorAll('.note')].find((n) => n.textContent.includes('모서리로 키워요'));
+    return el && Number(el.style.getPropertyValue('--s')) > 1.4;
+  }, null, { timeout: 10_000 });
+  // 남의 글을 고르면 손잡이가 없어요.
+  await bob.locator('.note', { hasText: '모서리로 키워요' }).click();
+  await bob.waitForSelector('#dock[data-mode="pick"]');
+  assert.equal(await bob.isHidden('.note-grip'), true);
+  await bob.keyboard.press('Escape');
+  // 커진 글이 다른 테스트의 글을 가리지 않게 지워요.
+  await mine.click();
+  await alice.click('#pickDelete');
+  await alice.click('#pickYes');
+  await waitForGone(bob, '모서리로 키워요');
 });
 
 test('Enter로 바로 올리고, Shift+Enter로 줄을 바꿔요', async () => {

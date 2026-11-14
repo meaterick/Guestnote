@@ -186,7 +186,7 @@ function loadMotion(notes) {
   }
 }
 
-const boardCtx = () => ({ uid: state.store?.uid, canMove: perms.canMove, photo: photoOf });
+const boardCtx = () => ({ uid: state.store?.uid, canMove: perms.canMove, canResize: perms.canEdit, photo: photoOf });
 
 // ---------- 날짜 이동 ----------
 function routeKey() {
@@ -317,7 +317,7 @@ async function submitNote(args) {
     await saveNote(args);
   } catch (err) {
     if (err?.code !== 'permission-denied') throw err;
-    const { font, size, draw, ...plain } = args.data;
+    const { font, size, draw, drawW, drawH, pen, ...plain } = args.data;
     if (font !== 'pen' || size !== 1 || draw) {
       throw Object.assign(new Error('글꼴·크기·손그림을 저장하려면 사이트 관리자가 새 보안 규칙을 게시해야 해요. 기본 모양으로는 올릴 수 있어요.'), { cause: err });
     }
@@ -392,6 +392,16 @@ const board = createBoard({
       startWriting({ at, deferFocus: touch });
     },
     onMove: moveNote,
+    async onResize(note, size) {
+      try {
+        await state.store.resizeNote(note.id, size);
+      } catch (err) {
+        toast(err?.code === 'permission-denied'
+          ? '크기를 저장하지 못했어요. 날짜가 바뀌었거나, 사이트 관리자가 새 보안 규칙을 게시해야 해요.'
+          : errorMessage(err, '크기를 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.'), { tone: 'error' });
+        throw err;
+      }
+    },
   },
 });
 
