@@ -419,6 +419,8 @@ let selection = null;
 let calendar = null;
 
 $('#writeBtn').addEventListener('click', () => startWriting());
+// '그림 그리기'는 글상자 없이 바로 보드에 그리는 그림 모드로 열어요.
+$('#drawBtn').addEventListener('click', () => startWriting({ draw: true }));
 $('#backToToday').addEventListener('click', () => goTo(state.today));
 $('#todayBtn').addEventListener('click', () => goTo(state.today));
 $('#prevDay').addEventListener('click', () => goTo(addDays(state.view, -1)));
@@ -595,6 +597,7 @@ try {
   console.error(err);
   setBoardMessage('error');
   $('#writeBtn').disabled = true;
+  $('#drawBtn').disabled = true;
 }
 
 if (state.store) {

@@ -693,6 +693,16 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
 .cta:active { scale: 0.98; }
 .cta:disabled { opacity: 0.5; cursor: default; filter: none; }
 .cta svg { width: 21px; height: 21px; }
+/* 그림 그리기: 글 남기기 옆의 유리 버튼 */
+.cta--draw {
+  margin-left: 10px;
+  border-color: var(--glass-edge);
+  background: var(--glass-fill-strong);
+  color: var(--ink);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: inset 0 1px 0 var(--glass-shine), var(--shadow-1);
+}
 
 .dock__past {
   align-items: center;

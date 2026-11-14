@@ -194,15 +194,23 @@ test('글꼴과 크기를 고르면 다른 사람에게도 그대로 보여요',
 test('그림 모드에서는 칸 없이 보드에 바로 그리고, 그린 자리 그대로 올라가요', async () => {
   const inks = (page) => page.evaluate(() => [...document.querySelectorAll('.note.is-ink')].map((n) => n.dataset.id));
   const before = await inks(bob);
-  await alice.click('#writeBtn');
-  await alice.waitForSelector('.is-draft textarea');
-  await alice.check('#writeBar input[name=style][value=draw]', { force: true });
+  // '글 남기기' 옆의 '그림 그리기'를 누르면 바로 그림 모드예요.
+  assert.equal(await alice.isVisible('#drawBtn'), true);
+  await alice.click('#drawBtn');
   await alice.waitForSelector('#viewport.is-inking');
+  assert.equal(await alice.inputValue('#writeBar input[name=style]:checked'), 'draw');
   assert.equal(await alice.isHidden('.is-draft'), true, '그림 모드에서는 글상자(그림 칸)가 없어요');
   assert.equal(await alice.locator('text=여기에 그려요').count(), 0);
   // 선 굵기는 슬라이더로 정해요. (그림 모드에서는 '가' 버튼 대신 슬라이더가 보여요)
   assert.equal(await alice.isVisible('#writePen'), true);
   assert.equal(await alice.isVisible('#writeBigger'), false);
+  // 슬라이더는 마우스로 끌어서 바꿔요.
+  const pen = await alice.locator('#writePen').boundingBox();
+  await alice.mouse.move(pen.x + pen.width * 0.2, pen.y + pen.height / 2);
+  await alice.mouse.down();
+  await alice.mouse.move(pen.x + pen.width * 0.5, pen.y + pen.height / 2, { steps: 5 });
+  await alice.mouse.up();
+  assert.ok(Number(await alice.inputValue('#writePen')) > 10, `끌어서 굵기가 바뀌어요: ${await alice.inputValue('#writePen')}`);
   await alice.locator('#writePen').fill('14');
   assert.equal(await alice.evaluate(() => getComputedStyle(document.querySelector('.ink-layer')).getPropertyValue('--ink-w').trim()), '14px');
   // 빈 곳을 골라 두 줄 긋고, 하나 되돌려요. 끌어도 보드는 움직이지 않아요.
@@ -229,15 +237,16 @@ test('그림 모드에서는 칸 없이 보드에 바로 그리고, 그린 자�
   assert.ok(Math.abs(box.x - spot.x) < 20 && Math.abs(box.y - spot.y) < 20, `그린 자리 그대로예요: ${JSON.stringify(box)} / ${JSON.stringify(spot)}`);
   assert.ok(box.w > 100 && box.w < 160 && box.h > 35 && box.h < 80, `그린 크기만큼이에요: ${JSON.stringify(box)}`);
 
-  // 다음 글상자도 그림 모드로 바로 열려요. 글자로 바꾸면 다시 글자예요.
+  // 그림을 그린 뒤에도 '글 남기기'는 글자 모드로 열려요. 도구 막대에서 그림으로 바꿀 수도 있어요.
   await alice.click('#writeBtn');
-  await alice.waitForSelector('#viewport.is-inking');
-  assert.equal(await alice.inputValue('#writeBar input[name=style]:checked'), 'draw');
-  await alice.check('#writeBar input[name=style][value=text]', { force: true });
   await alice.waitForSelector('.is-draft textarea', { state: 'visible' });
+  assert.equal(await alice.inputValue('#writeBar input[name=style]:checked'), 'text');
   assert.equal(await alice.evaluate(() => document.querySelector('#viewport').classList.contains('is-inking')), false);
+  await alice.check('#writeBar input[name=style][value=draw]', { force: true });
+  await alice.waitForSelector('#viewport.is-inking');
   await alice.click('#writeCancel');
   await alice.waitForSelector('.is-draft', { state: 'detached' });
+  await alice.waitForFunction(() => !document.querySelector('#viewport').classList.contains('is-inking'));
 });
 
 test('내 글을 고르면 모서리 손잡이가 생기고, 끌면 크기가 바뀌어요 (남의 글은 손잡이가 없어요)', async () => {

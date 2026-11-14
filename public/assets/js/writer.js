@@ -374,7 +374,8 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
   biggerBtn.addEventListener('click', () => resize(1));
   // 도구를 눌러도 글상자의 커서가 그대로 있게 해요. (휴대폰 키보드가 내려가지 않게)
   bar.addEventListener('mousedown', (e) => {
-    if (d && e.target.closest('label, #writePhoto, .tools__size, .tools__ink')) e.preventDefault();
+    // (선 굵기 슬라이더는 끌어야 해서 막지 않아요)
+    if (d && e.target.closest('label, #writePhoto, .tools__size, .tools__ink button') && !e.target.closest('.tools__pen')) e.preventDefault();
   });
   bar.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && d) {
@@ -395,7 +396,7 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
   // note: 고칠 내 글 / file: 처음부터 넣을 사진
   // deferFocus: 손가락으로 두 번 눌러 열 때. 커서는 손가락을 떼는 순간(focusPending)에 둬요.
   // photo: 고칠 글의 사진으로 보여 줄 주소 (움직이는 GIF를 불러왔으면 그 주소)
-  function start({ at = null, note = null, file = null, deferFocus = false, photo = null } = {}) {
+  function start({ at = null, note = null, file = null, deferFocus = false, photo = null, draw = false } = {}) {
     if (d) {
       // 이미 쓰는 중이면 그 글상자를 누른 곳으로 옮기고 이어서 써요. (그림 모드에서는 그대로 그려요)
       if (at && !d.busy && !d.drawing) {
@@ -418,7 +419,9 @@ export function createWriter({ layer, bar, board, imageOptions, newId, onSubmit,
     };
     // 보드에 그린 그림은 그림 모드로 열어요. 새 글은 마지막에 쓴 모드로 열어요.
     const ink = note && isInk(note);
-    setStyle(note ? (ink ? 'draw' : note.type) : lastLook.style, note?.rot);
+    // '그림 그리기'로 열면 그림 모드, '글 남기기'나 두 번 누르기로 열면 마지막 글 모양(글자/메모장)이에요.
+    const textStyle = lastLook.style === 'draw' ? 'text' : lastLook.style;
+    setStyle(note ? (ink ? 'draw' : note.type) : draw ? 'draw' : textStyle, note?.rot);
     setTint(note?.color ?? 'clear');
     setLook(note?.font ?? lastLook.font, note?.size ?? lastLook.size);
     d.text.value = note?.text ?? '';
