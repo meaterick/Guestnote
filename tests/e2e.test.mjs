@@ -174,10 +174,10 @@ test('글꼴과 크기를 고르고 손그림을 그려서 올리면, 다른 사
   await alice.click('#writeBigger');
   await alice.click('#writeBigger');
   assert.ok(await width() > small * 1.3, '크게 하면 글상자도 커져요');
-  // 손그림: 두 줄 긋고 하나 되돌려요.
-  await alice.click('#writeDraw');
-  assert.equal(await alice.getAttribute('#writeDraw', 'aria-pressed'), 'true');
+  // 손그림: 모양을 '그림'으로 바꾸면 바로 그림판이 열려요. 두 줄 긋고 하나 되돌려요.
+  await alice.check('#writeBar input[name=style][value=draw]', { force: true });
   await alice.waitForSelector('.is-draft .draft__pad:not([hidden])');
+  assert.equal(await alice.locator('#writeDraw').count(), 0, '그림 추가 버튼은 따로 없어요');
   await scribble(alice, [0.1, 0.2], [0.8, 0.7]);
   await scribble(alice, [0.2, 0.8], [0.9, 0.1]);
   assert.equal(await alice.locator('.is-draft .draft__pad path').count(), 2);
@@ -209,11 +209,24 @@ test('글꼴과 크기를 고르고 손그림을 그려서 올리면, 다른 사
   // 그림만 그려서 올릴 수도 있어요.
   await bob.click('#writeBtn');
   await bob.waitForSelector('.is-draft textarea');
-  await bob.click('#writeDraw');
+  await bob.check('#writeBar input[name=style][value=draw]', { force: true });
+  assert.equal(await bob.isHidden('.is-draft .draft__grow'), true, '그림 모드에서는 글칸 대신 그림판만 보여요');
   await scribble(bob, [0.3, 0.3], [0.6, 0.6]);
   await bob.click('#writeSubmit');
   await bob.waitForSelector('.is-draft', { state: 'detached', timeout: 15_000 });
   await alice.waitForFunction(() => [...document.querySelectorAll('.note')].some((n) => n.querySelector('.note__ink path') && n.getAttribute('aria-label') === '그림'), null, { timeout: 10_000 });
+  // 다음 글상자는 고른 모드(그림) 그대로 바로 그림판으로 열려요. 글자로 바꾸면 다시 글자로 열려요.
+  await bob.mouse.dblclick(...(await (async () => { const s = await emptySpot(bob); return [s.x, s.y]; })()));
+  await bob.waitForSelector('.is-draft .draft__pad:not([hidden])');
+  assert.equal(await bob.inputValue('#writeBar input[name=style]:checked'), 'draw');
+  await scribble(bob, [0.2, 0.2], [0.4, 0.5]);
+  assert.equal(await bob.locator('.is-draft .draft__pad path').count(), 1);
+  await bob.check('#writeBar input[name=style][value=text]', { force: true });
+  await bob.click('#writeCancel');
+  await bob.click('#writeBtn');
+  await bob.waitForSelector('.is-draft .draft__grow:not([hidden]) textarea');
+  assert.equal(await bob.isHidden('.is-draft .draft__pad'), true);
+  await bob.click('#writeCancel');
 });
 
 test('Enter로 바로 올리고, Shift+Enter로 줄을 바꿔요', async () => {

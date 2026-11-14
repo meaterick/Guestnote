@@ -544,6 +544,7 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
 .note__ink path { fill: none; stroke: currentColor; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
 .note--text .note__ink { filter: drop-shadow(0 1px 0 rgb(255 255 255 / 0.25)); }
 /* 그리는 중인 판: 점선 테두리로 그릴 곳을 보여 주고, 손가락으로 그려도 보드가 움직이지 않게 해요. */
+.note.is-draft .draft__grow[hidden] { display: none; }
 .draft__pad { border-radius: 12px; outline: 1.5px dashed color-mix(in oklch, var(--ink) 35%, transparent); outline-offset: -1px; background: color-mix(in oklch, var(--soft-fill) 60%, transparent); touch-action: none; cursor: crosshair; -webkit-user-select: none; user-select: none; }
 .draft__pad .note__ink { pointer-events: none; }
 .draft__pad-tools { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; }
@@ -708,7 +709,7 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
   border-radius: 999px;
 }
 .tools .seg { margin: 0; }
-.tools__style { flex: none; width: 148px; }
+.tools__style { flex: none; width: 210px; }
 .tools__end { display: flex; gap: 6px; flex: none; }
 .tools .tools__tints { flex: none; flex-wrap: nowrap; }
 @media (min-width: 721px) and (max-width: 1020px) {
@@ -731,7 +732,6 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
 .size-glyph { font-weight: 700; line-height: 1; }
 .size-glyph--s { font-size: 12px; }
 .size-glyph--l { font-size: 19px; }
-.tools__draw[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .swatches--small { flex-wrap: nowrap; gap: 7px; padding: 0 2px; }
 .swatches--small .swatch { width: 26px; height: 26px; }
 .swatches--small .swatch input:checked + .swatch__chip { outline-width: 2px; outline-offset: 2px; }
@@ -1043,7 +1043,10 @@ button.chip--live { cursor: pointer; font: inherit; font-size: 13px; }
     border-radius: 24px;
   }
   .tools__tints { order: 5; width: 100%; justify-content: space-around; }
-  .tools__look { order: 6; width: 100%; justify-content: space-around; }
+  .tools__style { flex: 1 1 0; width: auto; min-width: 0; }
+  .tools__style .seg__item span { padding-inline: 0; font-size: 14px; white-space: nowrap; }
+  .tools__look { order: 6; flex: 1 1 auto; justify-content: space-around; }
+  .tools__photo { order: 7; }
   .tools__look .tools__font { flex: 1; max-width: 9em; }
 
   .modal, .modal--calendar, .modal--menu {
